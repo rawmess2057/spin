@@ -1,0 +1,8 @@
+node_modules/
+target/
+**/.anchor/
+**/.turbo/
+.app/
+*.log
+.env
+.env.local

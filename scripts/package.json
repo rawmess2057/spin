@@ -1,0 +1,28 @@
+{
+  "name": "spin-scripts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@orao-network/solana-vrf-cb": "^0.4.0",
+    "@solana/kit": "^7.0.0",
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.10",
+    "typescript": "^7.0.2"
+  },
+  "devDependencies": {
+    "@types/bs58": "^4.0.4"
+  }
+}

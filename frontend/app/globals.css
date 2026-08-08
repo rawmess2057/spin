@@ -1,0 +1,206 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0f;
+  --foreground: #ffffff;
+  --primary: #00ffa3;
+  --primary-foreground: #0a0a0f;
+  --muted: #a0a0b0;
+  --muted-foreground: #7a7a8c;
+  --card: #12121a;
+  --card-foreground: #ffffff;
+  --popover: #12121a;
+  --popover-foreground: #ffffff;
+  --border: #23232f;
+  --border-low: rgba(255, 255, 255, 0.08);
+  --input: #23232f;
+  --accent: #9945ff;
+  --accent-foreground: #ffffff;
+  --cream: #1a1a24;
+  --gold: #ffd700;
+  --gold-foreground: #0a0a0f;
+  --orange: #ff6b35;
+  --orange-foreground: #0a0a0f;
+  --destructive: #ff3b5c;
+  --destructive-foreground: #ff3b5c;
+  --ring: #00ffa3;
+  --radius: 0.625rem;
+  --secondary: #1a1a24;
+  --secondary-foreground: #ffffff;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display:
+    var(--font-orbitron), var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-roboto-mono), ui-monospace, monospace;
+}
+
+.juwa {
+  --background: #181818;
+  --foreground: #ffffff;
+  --primary: #ffc057;
+  --primary-foreground: #181818;
+  --muted: #b2b2b2;
+  --muted-foreground: #8a8a8a;
+  --card: #222222;
+  --card-foreground: #ffffff;
+  --popover: #222222;
+  --popover-foreground: #ffffff;
+  --border: #333333;
+  --border-low: rgba(255, 255, 255, 0.12);
+  --input: #2a2a2a;
+  --accent: #6668ff;
+  --accent-foreground: #ffffff;
+  --cream: #202020;
+  --gold: #ffc057;
+  --gold-foreground: #181818;
+  --orange: #f00001;
+  --orange-foreground: #ffffff;
+  --destructive: #f00001;
+  --destructive-foreground: #ffffff;
+  --ring: #ffc057;
+  --radius: 0.25rem;
+  --secondary: #202020;
+  --secondary-foreground: #ffffff;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-oswald), var(--font-inter), sans-serif;
+  --font-mono: var(--font-roboto-mono), ui-monospace, monospace;
+  background: #181818;
+  color: #ffffff;
+}
+
+.vegas {
+  --background: #181818;
+  --foreground: #ffffff;
+  --primary: #ffc057;
+  --primary-foreground: #181818;
+  --muted: #b2b2b2;
+  --muted-foreground: #8a8a8a;
+  --card: #222222;
+  --card-foreground: #ffffff;
+  --popover: #222222;
+  --popover-foreground: #ffffff;
+  --border: #333333;
+  --border-low: rgba(255, 255, 255, 0.12);
+  --input: #2a2a2a;
+  --accent: #f00001;
+  --accent-foreground: #ffffff;
+  --cream: #202020;
+  --gold: #ffc057;
+  --gold-foreground: #181818;
+  --orange: #f00001;
+  --orange-foreground: #ffffff;
+  --destructive: #f00001;
+  --destructive-foreground: #ffffff;
+  --ring: #ffc057;
+  --radius: 0.25rem;
+  --secondary: #202020;
+  --secondary-foreground: #ffffff;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-oswald), var(--font-inter), sans-serif;
+  --font-mono: var(--font-roboto-mono), ui-monospace, monospace;
+  background: #181818;
+  color: #ffffff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-border: var(--border);
+  --color-border-low: var(--border-low);
+  --color-input: var(--input);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-cream: var(--cream);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-orange: var(--orange);
+  --color-orange-foreground: var(--orange-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --font-contrail: var(--font-contrail);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+@keyframes spin-dice-tumble {
+  from {
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateX(360deg) rotateY(360deg) rotateZ(360deg);
+  }
+}
+
+@keyframes grid-cell-drop {
+  from {
+    transform: translateY(-110%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.grid-cell-drop {
+  animation: grid-cell-drop 0.42s cubic-bezier(0.2, 0.8, 0.3, 1.1);
+}
+
+/*
+ * Roll effect for the grid games. The symbol falls through the cell window
+ * while the symbol itself is swapped on the same cadence (SPIN_TICK_MS in
+ * grid-board.tsx), so the swap always happens behind the edge fade and reads
+ * as a continuous reel strip rather than a flicker.
+ */
+@keyframes grid-cell-spin {
+  from {
+    transform: translateY(-70%);
+    opacity: 0;
+  }
+  30%,
+  70% {
+    opacity: 1;
+  }
+  to {
+    transform: translateY(70%);
+    opacity: 0;
+  }
+}
+
+.grid-cell-spin {
+  animation: grid-cell-spin 0.12s linear infinite;
+  filter: blur(0.7px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid-cell-drop,
+  .grid-cell-spin {
+    animation: none;
+    filter: none;
+  }
+}
