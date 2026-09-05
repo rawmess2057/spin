@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  createSignerFromKeyPair,
-  type KeyPairSigner,
-} from "@solana/kit";
+import { createSignerFromKeyPair, type KeyPairSigner } from "@solana/kit";
 
 /**
  * The browser-held session key that signs bets so the player's wallet doesn't

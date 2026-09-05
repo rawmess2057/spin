@@ -54,7 +54,7 @@ export type GameConfig = {
   maxBet: bigint;
   /** House edge in basis points (e.g. 200 = 2%). */
   houseEdgeBp: number;
-  /** Game-specific params. For Neon Dice: [min_target u16][max_target u16] LE. */
+  /** Game-specific params (reserved; grid/slot games ignore these). */
   params: ReadonlyUint8Array;
   bump: number;
 };
@@ -65,7 +65,7 @@ export type GameConfigArgs = {
   maxBet: number | bigint;
   /** House edge in basis points (e.g. 200 = 2%). */
   houseEdgeBp: number;
-  /** Game-specific params. For Neon Dice: [min_target u16][max_target u16] LE. */
+  /** Game-specific params (reserved; grid/slot games ignore these). */
   params: ReadonlyUint8Array;
   bump: number;
 };

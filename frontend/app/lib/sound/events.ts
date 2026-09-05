@@ -8,22 +8,75 @@ import {
   thump,
   tone,
 } from "./synth";
-export { isSoundMuted, setSoundMuted } from "./synth";
+export {
+  ambientStart,
+  ambientStop,
+  isSoundMuted,
+  setSoundMuted,
+} from "./synth";
+
+const HAPTIC_KEY = "spin.haptic.enabled";
+
+let hapticEnabled = true;
+try {
+  hapticEnabled = localStorage.getItem(HAPTIC_KEY) !== "0";
+} catch {
+  // ignore
+}
+
+export function isHapticEnabled(): boolean {
+  return hapticEnabled;
+}
+
+export function setHapticEnabled(value: boolean): void {
+  hapticEnabled = value;
+  try {
+    localStorage.setItem(HAPTIC_KEY, value ? "1" : "0");
+  } catch {
+    // ignore
+  }
+}
+
+/** Light tactile feedback for button presses and interactive elements. */
+export function haptic(level: "light" | "medium" | "heavy" = "light"): void {
+  if (!hapticEnabled || typeof navigator === "undefined") return;
+  if (!("vibrate" in navigator)) return;
+  const pattern =
+    level === "light" ? 10 : level === "medium" ? 25 : [50, 30, 30];
+  try {
+    navigator.vibrate(pattern);
+  } catch {
+    // vibration not supported — ignore
+  }
+}
 
 let stopWhir: (() => void) | null = null;
+let setWhirRate: ((rate: number) => void) | null = null;
 
 /** Lever-pull sweep plus the reel motor spinning up. */
 export function spinStart(): void {
   filteredNoiseSweep(300, 2200, 0.4, 0.1);
   thump(180, 60, 0.18, 0.16);
+  haptic("medium");
   stopWhir?.();
-  stopWhir = motorWhir(0.05);
+  const whir = motorWhir(0.05);
+  stopWhir = whir.stop;
+  setWhirRate = whir.setRate;
 }
 
 /** Cuts the motor whir — call once every reel has stopped. */
 export function spinEnd(): void {
   stopWhir?.();
   stopWhir = null;
+  setWhirRate = null;
+}
+
+/**
+ * Adjusts the reel motor pitch while it runs — drops when the machine eases
+ * into a long VRF wait ("lull") and returns to normal when the result lands.
+ */
+export function setSpinPitch(rate: number): void {
+  setWhirRate?.(rate);
 }
 
 /**
@@ -53,14 +106,28 @@ export function lose(): void {
 }
 
 /**
- * Outcome sound for a win: a rising arpeggio over a cascade of coin pings.
- * The cascade is what actually reads as "casino" — its length scales with
- * the payout multiplier. `multiplierBp` is in basis points.
+ * "So close" outcome: the reels teased a win that never came. Descending
+ * detuned tones (a slow fall instead of a defeat thud), trailing off softly.
  */
+export function nearMiss(): void {
+  const notes = [392, 349.23, 311.13]; // G4 → F4 → Eb4
+  notes.forEach((f, i) => {
+    tone(f, 0.09, 0.01, 0.28, i * 0.17, "triangle");
+    tone(f / 2, 0.05, 0.01, 0.22, i * 0.17, "sine");
+  });
+  thump(95, 42, 0.4, 0.16, 0.55);
+}
+
+/** Outcome sound for a win: a rising arpeggio over a cascade of coin pings.
+ * The cascade is what actually reads as "casino" — its length scales with
+ * the payout multiplier. `multiplierBp` is in basis points. */
 export function win(multiplierBp: bigint): void {
   const mult = Number(multiplierBp) / 10_000;
   const big = mult >= 10;
   const huge = mult >= 30;
+
+  if (huge) haptic("heavy");
+  else if (big) haptic("medium");
 
   const notes = huge
     ? [523.25, 659.25, 783.99, 1046.5, 1318.5, 1568, 2093]
@@ -87,16 +154,51 @@ function coinCascade(count: number): void {
   }
 }
 
-/** Short dice-tumble sound while waiting for the roll to land. */
-export function diceRoll(): void {
-  filteredNoiseSweep(500, 1400, 0.3, 0.1);
-  noiseKnock(1200, 0.05, 0.15, 0.06);
-  noiseKnock(900, 0.05, 0.13, 0.14);
+/** Two-tone rising siren — up-down-up. */
+function jackpotSiren(): void {
+  for (let i = 0; i < 9; i++) {
+    const dir = Math.sin(i * Math.PI * 0.5) > 0 ? 1 : -1;
+    const f = 620 + dir * 260;
+    tone(f, 0.09, 0.01, 0.28, i * 0.16, "sawtooth");
+    tone(f * 1.5, 0.05, 0.01, 0.12, i * 0.16, "sine");
+  }
 }
 
-/** Single dice bounce — played at random intervals while cubes tumble. */
-export function diceClatter(): void {
-  noiseKnock(700 + Math.random() * 500, 0.04, 0.12, Math.random() * 0.05);
+/** Sustained major-chord pad swelling under a big-win fanfare. */
+function chordPad(root: number, release: number): void {
+  [1, 1.25, 1.5, 2].forEach((mult) => {
+    tone(root * mult, 0.05, 0.4, release, 0, "sine");
+  });
+}
+
+/**
+ * The big-win fanfare for the full-screen celebration, scaled by tier.
+ * Smaller payouts keep `win()` — this is the money shot for the rare hits.
+ */
+export function bigWinFanfare(tier: "big" | "huge" | "jackpot"): void {
+  if (tier === "jackpot") {
+    chordPad(220, 2.4); // A3 major
+    jackpotSiren();
+    coinCascade(60);
+    noiseBurst(0.9, 0.1);
+    thump(90, 50, 0.5, 0.25, 1.6);
+  } else if (tier === "huge") {
+    chordPad(261.63, 1.8); // C4 major
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1568, 2093];
+    notes.forEach((f, i) => {
+      tone(f, 0.14, 0.01, 0.4, i * 0.13, "triangle");
+      tone(f * 2, 0.045, 0.01, 0.18, i * 0.13, "sine");
+    });
+    coinCascade(32);
+    noiseBurst(0.6, 0.08);
+  } else {
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5, 1568];
+    notes.forEach((f, i) => {
+      tone(f, 0.14, 0.01, 0.35, i * 0.16, "triangle");
+      tone(f * 2, 0.045, 0.01, 0.18, i * 0.16, "sine");
+    });
+    coinCascade(20);
+  }
 }
 
 /**
@@ -104,13 +206,7 @@ export function diceClatter(): void {
  * cascade and a final noise burst.
  */
 export function jackpot(): void {
-  // Two-tone siren — up-down-up.
-  for (let i = 0; i < 9; i++) {
-    const dir = Math.sin(i * Math.PI * 0.5) > 0 ? 1 : -1;
-    const f = 620 + dir * 260;
-    tone(f, 0.09, 0.01, 0.28, i * 0.16, "sawtooth");
-    tone(f * 1.5, 0.05, 0.01, 0.12, i * 0.16, "sine");
-  }
+  jackpotSiren();
   coinCascade(40);
   noiseBurst(0.8, 0.09);
   thump(90, 50, 0.5, 0.25, 1.5);

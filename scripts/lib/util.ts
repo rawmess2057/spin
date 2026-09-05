@@ -57,8 +57,64 @@ export interface RpcBundle {
   commitment: "confirmed";
 }
 
+// Public devnet endpoints intermittently answer 429 / "Internal error" and
+// drop connections; the reveal service and smoke test poll on a schedule, so
+// a plain failure would otherwise kill the run. Retry idempotent reads with
+// backoff. Sends are left alone — they carry retry semantics of their own
+// (the sendAndConfirm factory) and must never double-submit.
+const READ_RETRIES = 5;
+const BASE_BACKOFF_MS = 400;
+
+function isRetryable(err: unknown): boolean {
+  const e = err as { context?: { __code?: number }; cause?: { code?: string } };
+  const code = e?.context?.__code;
+  if (code === 8100002) return true; // HTTP transport error (429, 5xx, drop)
+  if (code === -32603) return true; // JSON-RPC internal error
+  if (err instanceof TypeError && e?.cause?.code?.startsWith("UND_ERR_")) {
+    return true; // undici network failure (connect timeout, socket drop)
+  }
+  return false;
+}
+
+// The wrapper returns the same shape as its input, so `any` keeps the
+// cluster-typed RPC ergonomics of the caller (sendAndConfirmFactory wants
+// cluster-bound RPCs, which a generic Rpc isn't assignable to).
+export function retryingRpc(rpc: ReturnType<typeof createSolanaRpc>): any {
+  return new Proxy(rpc, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function") return value;
+      if (prop === "sendTransaction") return value; // never blindly resubmit
+      return (...args: unknown[]) => {
+        const call = value.apply(target, args);
+        if (call?.send == null) return call;
+        return {
+          send: async () => {
+            const rawSend = call.send;
+            let attempt = 0;
+            for (;;) {
+              try {
+                return await rawSend();
+              } catch (err) {
+                if (!isRetryable(err) || attempt >= READ_RETRIES) throw err;
+                attempt += 1;
+                console.warn(
+                  `[util] retrying ${String(prop)} (${err instanceof Error ? err.message : String(err)}), attempt ${attempt}/${READ_RETRIES}`
+                );
+                await sleep(
+                  BASE_BACKOFF_MS * 2 ** attempt + Math.random() * 200
+                );
+              }
+            }
+          },
+        };
+      };
+    },
+  });
+}
+
 export function createRpcBundle(rpcUrl: string): RpcBundle {
-  const rpc = createSolanaRpc(rpcUrl);
+  const rpc = retryingRpc(createSolanaRpc(rpcUrl));
   const rpcSubscriptions = createSolanaRpcSubscriptions(wsUrl());
   const sendAndConfirm = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions });
   return { rpc, sendAndConfirm, commitment: "confirmed" };

@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./chainState";
 export * from "./creditLedger";
 export * from "./gameConfig";
 export * from "./houseTreasury";

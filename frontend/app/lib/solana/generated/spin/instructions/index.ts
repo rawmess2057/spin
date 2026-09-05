@@ -7,6 +7,7 @@
  */
 
 export * from "./deposit";
+export * from "./initChain";
 export * from "./initConfig";
 export * from "./initCredits";
 export * from "./initGameConfig";
@@ -14,8 +15,10 @@ export * from "./placeBet";
 export * from "./refundSpin";
 export * from "./resolveSpin";
 export * from "./revokeDelegate";
+export * from "./setChainMode";
 export * from "./setDelegate";
 export * from "./setPaused";
+export * from "./spinChain";
 export * from "./treasuryDeposit";
 export * from "./treasuryWithdraw";
 export * from "./withdraw";

@@ -4,7 +4,8 @@ import {
   type Address,
 } from "@solana/kit";
 import bs58 from "bs58";
-import { PROGRAM_ID, SEEDS, VRF_PROGRAM_ID } from "./config.js";
+import { sha256 } from "@noble/hashes/sha256";
+import { PROGRAM_ID, SEEDS } from "./config.js";
 import { concatBytes, ixDiscriminator, u16Le, u64Le, u8 } from "./util.js";
 
 export type AccountMetaInput = {
@@ -30,6 +31,10 @@ export async function houseAddress(): Promise<string> {
   return pda(PROGRAM_ID, [new TextEncoder().encode(SEEDS.HOUSE)]);
 }
 
+export async function chainAddress(): Promise<string> {
+  return pda(PROGRAM_ID, [new TextEncoder().encode(SEEDS.CHAIN)]);
+}
+
 export async function vrfStateAddress(): Promise<string> {
   return pda(PROGRAM_ID, [new TextEncoder().encode(SEEDS.VRF_STATE)]);
 }
@@ -41,8 +46,11 @@ export async function gameConfigAddress(gameId: number): Promise<string> {
   ]);
 }
 
-export async function pendingAddress(seed: Uint8Array): Promise<string> {
-  return pda(PROGRAM_ID, [new TextEncoder().encode(SEEDS.PENDING), seed]);
+export async function vaultAddress(player: string): Promise<string> {
+  return pda(PROGRAM_ID, [
+    new TextEncoder().encode(SEEDS.VAULT),
+    decodeAddress(player),
+  ]);
 }
 
 export async function sessionAddress(player: string): Promise<string> {
@@ -52,91 +60,18 @@ export async function sessionAddress(player: string): Promise<string> {
   ]);
 }
 
-export async function vaultAddress(player: string): Promise<string> {
-  return pda(PROGRAM_ID, [
-    new TextEncoder().encode(SEEDS.VAULT),
-    decodeAddress(player),
-  ]);
-}
-
 export async function creditsAddress(): Promise<string> {
   return pda(PROGRAM_ID, [new TextEncoder().encode(SEEDS.CREDITS)]);
 }
 
-export async function networkStateAddress(): Promise<string> {
-  return pda(VRF_PROGRAM_ID, [new TextEncoder().encode(SEEDS.VRF_CONFIG)]);
-}
-
-export async function clientAddress(state: string): Promise<string> {
-  return pda(VRF_PROGRAM_ID, [
-    new TextEncoder().encode(SEEDS.VRF_CLIENT),
-    decodeAddress(PROGRAM_ID),
-    decodeAddress(state),
-  ]);
-}
-
-export async function requestAddress(client: string, seed: Uint8Array): Promise<string> {
-  return pda(VRF_PROGRAM_ID, [
-    new TextEncoder().encode(SEEDS.VRF_REQUEST),
-    decodeAddress(client),
-    seed,
-  ]);
-}
-
 // ---------------------------------------------------------------------------
-// Neon Slots outcome math (mirror of the on-chain `slots_eval`).
+// Reveal chain (mirror of `chain_randomness` in the program)
 // ---------------------------------------------------------------------------
 
-export const SLOTS_REELS = 5;
-export const SLOTS_SYMBOLS = 10;
-export const SLOTS_BASE_BP = [
-  20_000n, 30_000n, 40_000n, 50_000n, 60_000n, 80_000n, 100_000n, 140_000n,
-  180_000n, 260_000n,
-] as const;
-export const SLOTS_X4 = 4n;
-export const SLOTS_X5 = 20n;
-export const SLOTS_MAX_MULTIPLIER_BP = 1_000_000n;
-
-function u64LeFromBytes(bytes: Uint8Array): bigint {
-  let v = 0n;
-  for (let i = 7; i >= 0; i--) v = (v << 8n) | BigInt(bytes[i] ?? 0);
-  return v;
-}
-
-export type SlotsEval = {
-  multiplierBp: bigint;
-  raw: bigint;
-  symbols: number[];
-  bestSymbol: number;
-  bestCount: number;
-  win: boolean;
-};
-
-/** Mirrors `slots_eval` in programs/spin/src/instructions/bet.rs. */
-export function slotsEval(randomness: Uint8Array): SlotsEval {
-  const raw = u64LeFromBytes(randomness.subarray(0, 8));
-  const symbols = Array.from({ length: SLOTS_REELS }, (_, i) =>
-    Number((raw / 10n ** BigInt(i)) % BigInt(SLOTS_SYMBOLS)),
-  );
-  const counts = new Array<number>(SLOTS_SYMBOLS).fill(0);
-  for (const s of symbols) counts[s] += 1;
-  let best = 0;
-  let bestCount = 0;
-  counts.forEach((c, s) => {
-    if (c >= bestCount) {
-      best = s;
-      bestCount = c;
-    }
-  });
-  let multiplierBp = 0n;
-  if (bestCount >= 3) {
-    const x = bestCount === 5 ? SLOTS_X5 : bestCount === 4 ? SLOTS_X4 : 1n;
-    multiplierBp = SLOTS_BASE_BP[best] * x;
-    if (multiplierBp > SLOTS_MAX_MULTIPLIER_BP) {
-      multiplierBp = SLOTS_MAX_MULTIPLIER_BP;
-    }
-  }
-  return { multiplierBp, raw, symbols, bestSymbol: best, bestCount, win: multiplierBp > 0n };
+/** The 64 bytes of randomness fed to the eval fns: reveal || sha256(reveal). */
+export function chainRandomness(reveal: Uint8Array): Uint8Array {
+  if (reveal.length !== 32) throw new Error("reveal must be 32 bytes");
+  return concatBytes(reveal, sha256(reveal));
 }
 
 // ---------------------------------------------------------------------------
@@ -216,72 +151,60 @@ export async function treasuryWithdrawIx(authority: string, amount: bigint): Pro
   ], [u64Le(amount)]);
 }
 
-// place_bet(game_id, amount, target, seed):
-//   player, treasury, session, config, vrf_state, pending,
-//   client, network_state, vrf_treasury, request, system_program
-/**
- * `authority` signs and pays: either the player themselves or the session key
- * they authorized with `set_delegate`. The stake comes out of the player's
- * credit vault, not their wallet.
- */
-export async function placeBetIx(
-  player: string,
+// ---------------------------------------------------------------------------
+// Reveal chain
+// ---------------------------------------------------------------------------
+
+// init_chain(seed, length): authority, treasury, chain, system_program
+export async function initChainIx(
+  authority: string,
   seed: Uint8Array,
+  length: bigint,
+): Promise<SpinInstruction> {
+  if (seed.length !== 32) throw new Error("seed must be 32 bytes");
+  return ix("init_chain", [
+    { address: authority, role: AccountRole.WRITABLE_SIGNER },
+    { address: await houseAddress(), role: AccountRole.READONLY },
+    { address: await chainAddress(), role: AccountRole.WRITABLE },
+    { address: systemProgram(), role: AccountRole.READONLY },
+  ], [seed, u64Le(length)]);
+}
+
+// set_chain_mode(active, vrf_enabled): authority, treasury, chain
+export async function setChainModeIx(
+  authority: string,
+  active: boolean,
+  vrfEnabled: boolean,
+): Promise<SpinInstruction> {
+  return ix("set_chain_mode", [
+    { address: authority, role: AccountRole.WRITABLE_SIGNER },
+    { address: await houseAddress(), role: AccountRole.READONLY },
+    { address: await chainAddress(), role: AccountRole.WRITABLE },
+  ], [new Uint8Array([active ? 1 : 0]), new Uint8Array([vrfEnabled ? 1 : 0])]);
+}
+
+// spin_chain(player, seed, game_id, amount, target, nonce, latest_index):
+// authority, player, treasury, vault, credits, chain, game_config
+export async function spinChainIx(
+  authority: string,
+  player: string,
   gameId: number,
   amount: bigint,
   target: bigint,
-  vrfTreasury: string,
-  authority: string = player,
+  reveal: Uint8Array,
 ): Promise<SpinInstruction> {
-  if (seed.length !== 32) throw new Error("seed must be 32 bytes");
-  const treasury = await houseAddress();
-  const vrfState = await vrfStateAddress();
-  const client = await clientAddress(vrfState);
-  const networkState = await networkStateAddress();
-  const request = await requestAddress(client, seed);
-  return ix("place_bet", [
+  if (reveal.length !== 32) throw new Error("reveal must be 32 bytes");
+  return ix("spin_chain", [
     { address: authority, role: AccountRole.WRITABLE_SIGNER },
     { address: player, role: AccountRole.READONLY },
-    { address: treasury, role: AccountRole.WRITABLE },
+    { address: await houseAddress(), role: AccountRole.WRITABLE },
+    { address: await chainAddress(), role: AccountRole.WRITABLE },
     { address: await vaultAddress(player), role: AccountRole.WRITABLE },
     { address: await creditsAddress(), role: AccountRole.WRITABLE },
     { address: await sessionAddress(player), role: AccountRole.WRITABLE },
     { address: await gameConfigAddress(gameId), role: AccountRole.READONLY },
-    { address: vrfState, role: AccountRole.WRITABLE },
-    { address: await pendingAddress(seed), role: AccountRole.WRITABLE },
-    { address: client, role: AccountRole.WRITABLE },
-    { address: networkState, role: AccountRole.WRITABLE },
-    { address: vrfTreasury, role: AccountRole.WRITABLE },
-    { address: request, role: AccountRole.WRITABLE },
-    { address: VRF_PROGRAM_ID, role: AccountRole.READONLY },
     { address: systemProgram(), role: AccountRole.READONLY },
-  ], [u8(gameId), u64Le(amount), u64Le(target), seed]);
-}
-
-// refund_spin(seed): authority, rent_payer, vault, credits, client, vrf_state,
-// network_state, request, treasury, system_program, pending
-export async function refundSpinIx(
-  player: string,
-  seed: Uint8Array,
-  authority: string = player,
-  rentPayer: string = authority,
-): Promise<SpinInstruction> {
-  if (seed.length !== 32) throw new Error("seed must be 32 bytes");
-  const vrfState = await vrfStateAddress();
-  const client = await clientAddress(vrfState);
-  return ix("refund_spin", [
-    { address: authority, role: AccountRole.READONLY_SIGNER },
-    { address: rentPayer, role: AccountRole.WRITABLE },
-    { address: await vaultAddress(player), role: AccountRole.WRITABLE },
-    { address: await creditsAddress(), role: AccountRole.WRITABLE },
-    { address: client, role: AccountRole.READONLY },
-    { address: vrfState, role: AccountRole.READONLY },
-    { address: await networkStateAddress(), role: AccountRole.READONLY },
-    { address: await requestAddress(client, seed), role: AccountRole.WRITABLE },
-    { address: await houseAddress(), role: AccountRole.WRITABLE },
-    { address: systemProgram(), role: AccountRole.READONLY },
-    { address: await pendingAddress(seed), role: AccountRole.WRITABLE },
-  ], [seed]);
+  ], [u8(gameId), u64Le(amount), u64Le(target), reveal]);
 }
 
 // ---------------------------------------------------------------------------

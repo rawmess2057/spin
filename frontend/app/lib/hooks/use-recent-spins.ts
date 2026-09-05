@@ -6,6 +6,7 @@ import { SPIN_PROGRAM_ADDRESS } from "../solana/client";
 import { usePda } from "./use-pda";
 import { useAppClient } from "./use-app-client";
 import { useCluster } from "./use-cluster";
+import { useAddressSeed } from "./use-vault";
 
 export type RecentSpin = {
   signature: Signature;
@@ -23,9 +24,12 @@ export type RecentSpin = {
 export function useRecentSpins(player: Address | null, limit = 8) {
   const client = useAppClient();
   const { cluster } = useCluster();
+  // The address goes in as its 32 raw bytes; usePda encodes bare strings as
+  // UTF-8, which would exceed the 32-byte seed limit and derive nothing.
+  const playerSeed = useAddressSeed(player ?? undefined);
   const session = usePda(
     SPIN_PROGRAM_ADDRESS,
-    ["session", player ?? new Uint8Array(32)],
+    ["session", playerSeed],
     player != null
   );
 

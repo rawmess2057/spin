@@ -34,6 +34,7 @@ import {
   type SelfPlanAndSendFunctions,
 } from "@solana/program-client-core";
 import {
+  getChainStateCodec,
   getCreditLedgerCodec,
   getGameConfigCodec,
   getHouseTreasuryCodec,
@@ -41,6 +42,8 @@ import {
   getPlayerSessionCodec,
   getPlayerVaultCodec,
   getVrfStateCodec,
+  type ChainState,
+  type ChainStateArgs,
   type CreditLedger,
   type CreditLedgerArgs,
   type GameConfig,
@@ -58,6 +61,7 @@ import {
 } from "../accounts";
 import {
   getDepositInstructionAsync,
+  getInitChainInstructionAsync,
   getInitConfigInstructionAsync,
   getInitCreditsInstructionAsync,
   getInitGameConfigInstruction,
@@ -65,12 +69,15 @@ import {
   getRefundSpinInstructionAsync,
   getResolveSpinInstructionAsync,
   getRevokeDelegateInstructionAsync,
+  getSetChainModeInstructionAsync,
   getSetDelegateInstructionAsync,
   getSetPausedInstructionAsync,
+  getSpinChainInstructionAsync,
   getTreasuryDepositInstructionAsync,
   getTreasuryWithdrawInstructionAsync,
   getWithdrawInstructionAsync,
   parseDepositInstruction,
+  parseInitChainInstruction,
   parseInitConfigInstruction,
   parseInitCreditsInstruction,
   parseInitGameConfigInstruction,
@@ -78,16 +85,20 @@ import {
   parseRefundSpinInstruction,
   parseResolveSpinInstruction,
   parseRevokeDelegateInstruction,
+  parseSetChainModeInstruction,
   parseSetDelegateInstruction,
   parseSetPausedInstruction,
+  parseSpinChainInstruction,
   parseTreasuryDepositInstruction,
   parseTreasuryWithdrawInstruction,
   parseWithdrawInstruction,
   type DepositAsyncInput,
+  type InitChainAsyncInput,
   type InitConfigAsyncInput,
   type InitCreditsAsyncInput,
   type InitGameConfigInput,
   type ParsedDepositInstruction,
+  type ParsedInitChainInstruction,
   type ParsedInitConfigInstruction,
   type ParsedInitCreditsInstruction,
   type ParsedInitGameConfigInstruction,
@@ -95,8 +106,10 @@ import {
   type ParsedRefundSpinInstruction,
   type ParsedResolveSpinInstruction,
   type ParsedRevokeDelegateInstruction,
+  type ParsedSetChainModeInstruction,
   type ParsedSetDelegateInstruction,
   type ParsedSetPausedInstruction,
+  type ParsedSpinChainInstruction,
   type ParsedTreasuryDepositInstruction,
   type ParsedTreasuryWithdrawInstruction,
   type ParsedWithdrawInstruction,
@@ -104,13 +117,16 @@ import {
   type RefundSpinAsyncInput,
   type ResolveSpinAsyncInput,
   type RevokeDelegateAsyncInput,
+  type SetChainModeAsyncInput,
   type SetDelegateAsyncInput,
   type SetPausedAsyncInput,
+  type SpinChainAsyncInput,
   type TreasuryDepositAsyncInput,
   type TreasuryWithdrawAsyncInput,
   type WithdrawAsyncInput,
 } from "../instructions";
 import {
+  findChainPda,
   findCreditsPda,
   findPendingPda,
   findSessionPda,
@@ -123,6 +139,7 @@ export const SPIN_PROGRAM_ADDRESS =
   "9sd7ASeBUmcCNm4eVFfQ7rSujtbVLmu8wMUh9PwdNWvP" as Address<"9sd7ASeBUmcCNm4eVFfQ7rSujtbVLmu8wMUh9PwdNWvP">;
 
 export enum SpinAccount {
+  ChainState,
   CreditLedger,
   GameConfig,
   HouseTreasury,
@@ -136,6 +153,17 @@ export function identifySpinAccount(
   account: { data: ReadonlyUint8Array } | ReadonlyUint8Array
 ): SpinAccount {
   const data = "data" in account ? account.data : account;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([130, 46, 94, 156, 79, 53, 170, 50])
+      ),
+      0
+    )
+  ) {
+    return SpinAccount.ChainState;
+  }
   if (
     containsBytes(
       data,
@@ -221,6 +249,7 @@ export function identifySpinAccount(
 
 export enum SpinInstruction {
   Deposit,
+  InitChain,
   InitConfig,
   InitCredits,
   InitGameConfig,
@@ -228,8 +257,10 @@ export enum SpinInstruction {
   RefundSpin,
   ResolveSpin,
   RevokeDelegate,
+  SetChainMode,
   SetDelegate,
   SetPaused,
+  SpinChain,
   TreasuryDeposit,
   TreasuryWithdraw,
   Withdraw,
@@ -249,6 +280,17 @@ export function identifySpinInstruction(
     )
   ) {
     return SpinInstruction.Deposit;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([208, 58, 100, 104, 45, 24, 216, 244])
+      ),
+      0
+    )
+  ) {
+    return SpinInstruction.InitChain;
   }
   if (
     containsBytes(
@@ -331,6 +373,17 @@ export function identifySpinInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([131, 187, 48, 188, 45, 26, 88, 203])
+      ),
+      0
+    )
+  ) {
+    return SpinInstruction.SetChainMode;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([242, 30, 46, 76, 108, 235, 128, 181])
       ),
       0
@@ -348,6 +401,17 @@ export function identifySpinInstruction(
     )
   ) {
     return SpinInstruction.SetPaused;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([104, 79, 99, 255, 165, 160, 242, 112])
+      ),
+      0
+    )
+  ) {
+    return SpinInstruction.SpinChain;
   }
   if (
     containsBytes(
@@ -395,6 +459,9 @@ export type ParsedSpinInstruction<
       instructionType: SpinInstruction.Deposit;
     } & ParsedDepositInstruction<TProgram>)
   | ({
+      instructionType: SpinInstruction.InitChain;
+    } & ParsedInitChainInstruction<TProgram>)
+  | ({
       instructionType: SpinInstruction.InitConfig;
     } & ParsedInitConfigInstruction<TProgram>)
   | ({
@@ -416,11 +483,17 @@ export type ParsedSpinInstruction<
       instructionType: SpinInstruction.RevokeDelegate;
     } & ParsedRevokeDelegateInstruction<TProgram>)
   | ({
+      instructionType: SpinInstruction.SetChainMode;
+    } & ParsedSetChainModeInstruction<TProgram>)
+  | ({
       instructionType: SpinInstruction.SetDelegate;
     } & ParsedSetDelegateInstruction<TProgram>)
   | ({
       instructionType: SpinInstruction.SetPaused;
     } & ParsedSetPausedInstruction<TProgram>)
+  | ({
+      instructionType: SpinInstruction.SpinChain;
+    } & ParsedSpinChainInstruction<TProgram>)
   | ({
       instructionType: SpinInstruction.TreasuryDeposit;
     } & ParsedTreasuryDepositInstruction<TProgram>)
@@ -441,6 +514,13 @@ export function parseSpinInstruction<TProgram extends string>(
       return {
         instructionType: SpinInstruction.Deposit,
         ...parseDepositInstruction(instruction),
+      };
+    }
+    case SpinInstruction.InitChain: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SpinInstruction.InitChain,
+        ...parseInitChainInstruction(instruction),
       };
     }
     case SpinInstruction.InitConfig: {
@@ -492,6 +572,13 @@ export function parseSpinInstruction<TProgram extends string>(
         ...parseRevokeDelegateInstruction(instruction),
       };
     }
+    case SpinInstruction.SetChainMode: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SpinInstruction.SetChainMode,
+        ...parseSetChainModeInstruction(instruction),
+      };
+    }
     case SpinInstruction.SetDelegate: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -504,6 +591,13 @@ export function parseSpinInstruction<TProgram extends string>(
       return {
         instructionType: SpinInstruction.SetPaused,
         ...parseSetPausedInstruction(instruction),
+      };
+    }
+    case SpinInstruction.SpinChain: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SpinInstruction.SpinChain,
+        ...parseSpinChainInstruction(instruction),
       };
     }
     case SpinInstruction.TreasuryDeposit: {
@@ -545,6 +639,8 @@ export type SpinPlugin = {
 };
 
 export type SpinPluginAccounts = {
+  chainState: ReturnType<typeof getChainStateCodec> &
+    SelfFetchFunctions<ChainStateArgs, ChainState>;
   creditLedger: ReturnType<typeof getCreditLedgerCodec> &
     SelfFetchFunctions<CreditLedgerArgs, CreditLedger>;
   gameConfig: ReturnType<typeof getGameConfigCodec> &
@@ -565,6 +661,10 @@ export type SpinPluginInstructions = {
   deposit: (
     input: DepositAsyncInput
   ) => ReturnType<typeof getDepositInstructionAsync> & SelfPlanAndSendFunctions;
+  initChain: (
+    input: InitChainAsyncInput
+  ) => ReturnType<typeof getInitChainInstructionAsync> &
+    SelfPlanAndSendFunctions;
   initConfig: (
     input: InitConfigAsyncInput
   ) => ReturnType<typeof getInitConfigInstructionAsync> &
@@ -593,6 +693,10 @@ export type SpinPluginInstructions = {
     input: RevokeDelegateAsyncInput
   ) => ReturnType<typeof getRevokeDelegateInstructionAsync> &
     SelfPlanAndSendFunctions;
+  setChainMode: (
+    input: SetChainModeAsyncInput
+  ) => ReturnType<typeof getSetChainModeInstructionAsync> &
+    SelfPlanAndSendFunctions;
   setDelegate: (
     input: SetDelegateAsyncInput
   ) => ReturnType<typeof getSetDelegateInstructionAsync> &
@@ -600,6 +704,10 @@ export type SpinPluginInstructions = {
   setPaused: (
     input: SetPausedAsyncInput
   ) => ReturnType<typeof getSetPausedInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  spinChain: (
+    input: SpinChainAsyncInput
+  ) => ReturnType<typeof getSpinChainInstructionAsync> &
     SelfPlanAndSendFunctions;
   treasuryDeposit: (
     input: TreasuryDepositAsyncInput
@@ -619,6 +727,7 @@ export type SpinPluginPdas = {
   treasury: typeof findTreasuryPda;
   vault: typeof findVaultPda;
   credits: typeof findCreditsPda;
+  chain: typeof findChainPda;
   vrfState: typeof findVrfStatePda;
   session: typeof findSessionPda;
   pending: typeof findPendingPda;
@@ -637,6 +746,7 @@ export function spinProgram() {
     return extendClient(client, {
       spin: <SpinPlugin>{
         accounts: {
+          chainState: addSelfFetchFunctions(client, getChainStateCodec()),
           creditLedger: addSelfFetchFunctions(client, getCreditLedgerCodec()),
           gameConfig: addSelfFetchFunctions(client, getGameConfigCodec()),
           houseTreasury: addSelfFetchFunctions(client, getHouseTreasuryCodec()),
@@ -650,6 +760,11 @@ export function spinProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getDepositInstructionAsync(input)
+            ),
+          initChain: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getInitChainInstructionAsync(input)
             ),
           initConfig: (input) =>
             addSelfPlanAndSendFunctions(
@@ -686,6 +801,11 @@ export function spinProgram() {
               client,
               getRevokeDelegateInstructionAsync(input)
             ),
+          setChainMode: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSetChainModeInstructionAsync(input)
+            ),
           setDelegate: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -695,6 +815,11 @@ export function spinProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getSetPausedInstructionAsync(input)
+            ),
+          spinChain: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSpinChainInstructionAsync(input)
             ),
           treasuryDeposit: (input) =>
             addSelfPlanAndSendFunctions(
@@ -716,6 +841,7 @@ export function spinProgram() {
           treasury: findTreasuryPda,
           vault: findVaultPda,
           credits: findCreditsPda,
+          chain: findChainPda,
           vrfState: findVrfStatePda,
           session: findSessionPda,
           pending: findPendingPda,

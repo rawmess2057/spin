@@ -4,8 +4,17 @@ import {
   SPIN_ERROR__BET_ABOVE_MAXIMUM,
   SPIN_ERROR__BET_BELOW_MINIMUM,
   SPIN_ERROR__BET_EXCEEDS_BANKROLL_LIMIT,
+  SPIN_ERROR__CHAIN_EXHAUSTED,
+  SPIN_ERROR__CHAIN_INACTIVE,
+  SPIN_ERROR__CHAIN_STALE,
+  SPIN_ERROR__CHAIN_STILL_ACTIVE,
+  SPIN_ERROR__CHAIN_TOO_LONG,
   SPIN_ERROR__CLIENT_MISMATCH,
+  SPIN_ERROR__DELEGATE_EXPIRED,
+  SPIN_ERROR__DELEGATE_LIMIT_EXCEEDED,
   SPIN_ERROR__HOUSE_PAUSED,
+  SPIN_ERROR__INSUFFICIENT_CREDITS,
+  SPIN_ERROR__INVALID_DELEGATE,
   SPIN_ERROR__INVALID_PLAYER,
   SPIN_ERROR__NETWORK_STATE_MISMATCH,
   SPIN_ERROR__NOT_AUTHORITY,
@@ -15,8 +24,10 @@ import {
   SPIN_ERROR__SPIN_NOT_RESOLVABLE,
   SPIN_ERROR__TARGET_OUT_OF_RANGE,
   SPIN_ERROR__TREASURY_BALANCE_TOO_LOW,
+  SPIN_ERROR__TREASURY_INSOLVENT,
   SPIN_ERROR__TREASURY_MISMATCH,
   SPIN_ERROR__UNKNOWN_GAME,
+  SPIN_ERROR__VRF_BETTING_DISABLED,
 } from "./generated/spin";
 
 // Codama's own getSpinErrorMessage() is stripped in production builds (a
@@ -49,21 +60,40 @@ const SPIN_ERROR_MESSAGES: Record<number, string> = {
   [SPIN_ERROR__NETWORK_STATE_MISMATCH]: "Network state account is invalid.",
   [SPIN_ERROR__ARITHMETIC_OVERFLOW]: "Payout calculation overflow.",
   [SPIN_ERROR__INVALID_PLAYER]: "Invalid player.",
+  [SPIN_ERROR__INVALID_DELEGATE]:
+    "This session key is not authorized to bet for you.",
+  [SPIN_ERROR__DELEGATE_EXPIRED]: "This session key has expired.",
+  [SPIN_ERROR__DELEGATE_LIMIT_EXCEEDED]:
+    "This session key's spending limit is used up.",
+  [SPIN_ERROR__INSUFFICIENT_CREDITS]: "Not enough diamonds — buy in to play.",
+  [SPIN_ERROR__TREASURY_INSOLVENT]:
+    "The house can't cover this win right now — try a smaller bet.",
+  [SPIN_ERROR__VRF_BETTING_DISABLED]:
+    "VRF betting is off — the house is using the instant chain.",
+  [SPIN_ERROR__CHAIN_INACTIVE]: "The house's reveal chain is not active yet.",
+  [SPIN_ERROR__CHAIN_STALE]:
+    "Another spin used this reveal first — retrying with the next one.",
+  [SPIN_ERROR__CHAIN_EXHAUSTED]:
+    "The reveal chain is exhausted — the house is rotating a new one.",
+  [SPIN_ERROR__CHAIN_TOO_LONG]: "Chain length is out of range.",
+  [SPIN_ERROR__CHAIN_STILL_ACTIVE]:
+    "The old chain is still active — it must be fully consumed first.",
 };
 
 /**
  * Anchor framework error codes (as opposed to our program's own 6000-range
- * codes). These can surface from any Anchor program in the transaction —
- * including the ORAO VRF program we CPI into — so they need their own
- * mapping or they reach the player as a bare "Custom program error: #2005".
+ * codes). These can surface from any Anchor program in the transaction — for
+ * example the legacy VRF program the chain mode replaced — so they need
+ * their own mapping or they reach the player as a bare "Custom program
+ * error: #2005".
  *
  * Only the codes actually reachable from this app are listed.
  */
 const ANCHOR_ERROR_MESSAGES: Record<number, string> = {
   2005:
     // Our program declares no rent_exempt constraint anywhere, so a 2005 can
-    // only come from the ORAO VRF CPI, where it means the randomness client
-    // account can no longer fund a request and stay rent-exempt.
+    // only come from the legacy VRF CPI, where it means the randomness
+    // client account can no longer fund a request and stay rent-exempt.
     "The game's randomness account is out of funds, so no new spins can be " +
     "requested right now. Nothing was charged — your bet was never sent. " +
     "The operator needs to top it up.",
@@ -81,8 +111,11 @@ function deepestMessage(err: unknown): string {
   return deepest;
 }
 
-/** Pulls a program error code out of any of the shapes Kit/RPC produce. */
-function extractProgramErrorCode(err: unknown): number | null {
+/**
+ * Pulls a program error code out of any of the shapes Kit/RPC produce.
+ * Exported so callers can branch on specific codes (e.g. ChainStale retry).
+ */
+export function getProgramErrorCode(err: unknown): number | null {
   const message = deepestMessage(err);
   const match =
     /[Cc]ustom program error: (0x[0-9a-fA-F]+)/.exec(message) ??
@@ -105,7 +138,7 @@ function extractProgramErrorCode(err: unknown): number | null {
 }
 
 export function parseSpinError(err: unknown): string | null {
-  const code = extractProgramErrorCode(err);
+  const code = getProgramErrorCode(err);
   if (code == null) return null;
   return SPIN_ERROR_MESSAGES[code] ?? ANCHOR_ERROR_MESSAGES[code] ?? null;
 }

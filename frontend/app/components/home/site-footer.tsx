@@ -13,7 +13,7 @@ export function SiteFooter() {
             </p>
             <p className="mt-3 text-sm leading-relaxed text-muted">
               A provably fair Solana casino. Every outcome is settled on-chain
-              by ORAO VRF randomness — verify any spin yourself.
+              from the house&apos;s commitment chain — verify any spin yourself.
             </p>
           </div>
           <div>
@@ -22,13 +22,8 @@ export function SiteFooter() {
             </h3>
             <ul className="mt-4 space-y-2 text-sm text-muted">
               <li>
-                <Link href="/slots" className="transition hover:text-gold">
-                  Slots
-                </Link>
-              </li>
-              <li>
-                <Link href="/dice" className="transition hover:text-gold">
-                  Dice
+                <Link href="/plinko" className="transition hover:text-gold">
+                  Plinko
                 </Link>
               </li>
               <li>
@@ -45,10 +40,7 @@ export function SiteFooter() {
             <h3 className="font-display text-sm font-bold uppercase tracking-[0.2em]">
               Subscribe to our newsletter
             </h3>
-            <form
-              className="mt-4 flex"
-              onSubmit={(e) => e.preventDefault()}
-            >
+            <form className="mt-4 flex" onSubmit={(e) => e.preventDefault()}>
               <input
                 type="email"
                 required
@@ -63,9 +55,8 @@ export function SiteFooter() {
               </button>
             </form>
             <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-              Made to play safely. All gameplay is virtual and for
-              entertainment purposes only. Play responsibly — 21+ where
-              applicable.
+              Made to play safely. All gameplay is virtual and for entertainment
+              purposes only. Play responsibly — 21+ where applicable.
             </p>
           </div>
         </div>

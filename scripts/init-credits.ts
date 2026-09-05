@@ -23,7 +23,7 @@ const credits = await creditsAddress();
 console.log("credits:  ", credits);
 
 const existing = await fetchAccount(bundle, credits);
-if (existing) {
+if (existing?.data) {
   const ledger = parseCreditLedger(existing.data);
   console.log(
     `already initialized — outstanding player credits: ${
@@ -36,6 +36,6 @@ if (existing) {
   console.log("init_credits:", sig);
 
   const created = await fetchAccount(bundle, credits);
-  if (!created) throw new Error("credit ledger was not created");
+  if (!created?.data) throw new Error("credit ledger was not created");
   console.log("total:", parseCreditLedger(created.data).total.toString());
 }

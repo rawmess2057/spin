@@ -17,7 +17,7 @@ const FAQS = [
   },
   {
     q: "Are the games provably fair?",
-    a: "Yes. Every spin and roll is settled on-chain by ORAO VRF randomness, including bets signed by your session key — they go through the exact same resolve_spin callback. Verify any outcome yourself in the Provably Fair panel on each game screen.",
+    a: "Yes. Every spin and roll is settled on-chain from the house's commitment chain — each outcome derives from a revealed seed hashed by the program, so it's fully reproducible client-side. Bets signed by your session key go through the exact same settle path. Verify any outcome yourself in the Provably Fair panel on each game screen.",
   },
   {
     q: "I need help — how do I reach support?",

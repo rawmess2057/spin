@@ -8,7 +8,11 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy": "tsx deploy.ts",
+    "init-house": "tsx init-house.ts",
+    "init-new-games": "tsx init-new-games.ts",
+    "serve": "tsx chain/serve.ts"
   },
   "keywords": [],
   "author": "",

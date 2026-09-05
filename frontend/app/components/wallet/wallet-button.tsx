@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { address, formatDecimalFixedPoint, lamportsToSol } from "@solana/kit";
 import {
   useWallets,
@@ -31,7 +31,19 @@ export function WalletButton() {
   const [copied, setCopied] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const walletAddress = connected?.account.address;
+  // Wallet-standard can restore a connection before React hydrates, so the
+  // client's first render would differ from the server's (which has no
+  // connected wallet yet) and throw a hydration mismatch. Hold the button in
+  // its disconnected state until after mount so both trees agree.
+  // A no-op store that flips to `true` only on the client after hydration.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+
+  const shownConnected = mounted && connected != null;
+  const walletAddress = shownConnected ? connected?.account?.address : undefined;
   const balance = useBalance(
     walletAddress ? address(walletAddress) : undefined
   );
@@ -60,7 +72,7 @@ export function WalletButton() {
     }
   };
 
-  if (!connected) {
+  if (!shownConnected) {
     return (
       <div className="relative" ref={ref}>
         <button

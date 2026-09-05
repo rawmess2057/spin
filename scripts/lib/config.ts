@@ -12,6 +12,7 @@ export const VRF_PROGRAM_ID =
 
 export const SEEDS = {
   HOUSE: "house",
+  CHAIN: "chain",
   VRF_STATE: "vrf_state",
   PENDING: "pending",
   GAME_CONFIG: "game_config",
@@ -22,12 +23,6 @@ export const SEEDS = {
   VRF_CLIENT: "OraoVrfCbClient",
   VRF_REQUEST: "OraoVrfCbRequest",
 } as const;
-
-export const GAME_DICE = 1;
-export const GAME_SLOTS = 2;
-export const GAME_PHARAOH = 3;
-export const GAME_DRAGON = 4;
-export const GAME_MINES = 5;
 
 export function rpcUrl(): string {
   return (

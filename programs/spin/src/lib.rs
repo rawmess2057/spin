@@ -86,4 +86,23 @@ pub mod spin {
     pub fn refund_spin(ctx: Context<RefundSpin>, seed: [u8; 32]) -> Result<()> {
         bet::refund_spin(ctx, seed)
     }
+
+    // Instant reveal chain
+    pub fn init_chain(ctx: Context<InitChain>, seed: [u8; 32], length: u64) -> Result<()> {
+        chain::init_chain(ctx, seed, length)
+    }
+
+    pub fn set_chain_mode(ctx: Context<SetChainMode>, active: bool, vrf_enabled: bool) -> Result<()> {
+        chain::set_chain_mode(ctx, active, vrf_enabled)
+    }
+
+    pub fn spin_chain(
+        ctx: Context<SpinChain>,
+        game_id: u8,
+        amount: u64,
+        target: u64,
+        reveal: [u8; 32],
+    ) -> Result<()> {
+        chain::spin_chain(ctx, game_id, amount, target, reveal)
+    }
 }

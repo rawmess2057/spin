@@ -60,7 +60,7 @@ export type PendingSpin = {
   player: Address;
   gameId: number;
   amount: bigint;
-  /** For Neon Dice: target threshold in [1, 9_800] (win if roll < target). */
+  /** Games other than Dice ignored the target (frontends send 0). */
   target: bigint;
   /** The VRF request seed (also the `pending` PDA seed component). */
   seed: ReadonlyUint8Array;
@@ -78,7 +78,7 @@ export type PendingSpinArgs = {
   player: Address;
   gameId: number;
   amount: number | bigint;
-  /** For Neon Dice: target threshold in [1, 9_800] (win if roll < target). */
+  /** Games other than Dice ignored the target (frontends send 0). */
   target: number | bigint;
   /** The VRF request seed (also the `pending` PDA seed component). */
   seed: ReadonlyUint8Array;

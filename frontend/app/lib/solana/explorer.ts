@@ -16,7 +16,7 @@ export function getExplorerUrl(path: string, cluster: ClusterMoniker): string {
   return url.toString();
 }
 
-export function ellipsify(str: string, chars = 4): string {
-  if (str.length <= chars * 2 + 3) return str;
+export function ellipsify(str: string | null | undefined, chars = 4): string {
+  if (str == null || str.length <= chars * 2 + 3) return str ?? "";
   return `${str.slice(0, chars)}...${str.slice(-chars)}`;
 }

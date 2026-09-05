@@ -132,6 +132,99 @@ export function noiseBurst(duration: number, peak: number): void {
 }
 
 /**
+ * A sustained brown-noise rumble — lowpassed so it reads as casino-floor
+ * room tone rather than hiss. Generated once and looped.
+ */
+function brownBuffer(c: AudioContext, seconds: number): AudioBuffer {
+  const buf = c.createBuffer(
+    1,
+    Math.floor(c.sampleRate * seconds),
+    c.sampleRate
+  );
+  const data = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < data.length; i++) {
+    last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+    data[i] = last * 3.5;
+  }
+  return buf;
+}
+
+let ambientHandle: { stop: () => void } | null = null;
+let ambientDingTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * The casino-floor ambience: a very quiet brown-noise rumble with slow gain
+ * breathing, plus a faint distant-reel ding at random intervals. Starts on
+ * the first user gesture (the toggle); the AudioContext stays suspended
+ * until then, so the bed fades in when the player actually interacts.
+ * No-op when already running, muted, or unsupported.
+ */
+export function ambientStart(): void {
+  const c = ensureCtx();
+  if (!c || muted || ambientHandle) return;
+  const gain = c.createGain();
+  gain.gain.setValueAtTime(0.0001, c.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.02, c.currentTime + 3);
+
+  // Very slow gain breathing so the hum lives instead of sitting static.
+  const lfo = c.createOscillator();
+  const lfoGain = c.createGain();
+  lfo.frequency.value = 0.11;
+  lfoGain.gain.value = 0.009;
+  lfo.connect(lfoGain);
+  lfoGain.connect(gain.gain);
+
+  const noise = c.createBufferSource();
+  noise.buffer = brownBuffer(c, 2);
+  noise.loop = true;
+  const filter = c.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 220;
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(c.destination);
+  noise.start();
+  lfo.start();
+
+  const scheduleDing = () => {
+    ambientDingTimer = setTimeout(
+      () => {
+        if (ambientHandle && !muted) {
+          const pitch = 2400 + Math.random() * 1800;
+          tone(pitch, 0.012, 0.002, 0.55);
+          tone(pitch * 0.5, 0.006, 0.002, 0.4);
+        }
+        scheduleDing();
+      },
+      4000 + Math.random() * 5000
+    );
+  };
+  scheduleDing();
+
+  ambientHandle = {
+    stop: () => {
+      const t = c.currentTime;
+      gain.gain.cancelScheduledValues(t);
+      gain.gain.setValueAtTime(Math.max(gain.gain.value, 0.0001), t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      noise.stop(t + 0.6);
+      lfo.stop(t + 0.6);
+      gain.disconnect();
+    },
+  };
+}
+
+export function ambientStop(): void {
+  ambientHandle?.stop();
+  ambientHandle = null;
+  if (ambientDingTimer != null) {
+    clearTimeout(ambientDingTimer);
+    ambientDingTimer = null;
+  }
+}
+
+/**
  * A short filtered noise transient — the percussive "body" of a mechanical
  * impact. Lowpassed so it reads as a wooden/metal knock rather than a hiss.
  */
@@ -189,11 +282,15 @@ export function thump(
 
 /**
  * Sustained detuned-sawtooth motor whir, used under the reel spin. Returns a
- * stop function so the caller can cut it when the reels finish.
+ * handle so the caller can cut it when the reels finish and drop the pitch
+ * when the machine eases into a long VRF wait (the "lull").
  */
-export function motorWhir(peak: number): () => void {
+export function motorWhir(peak: number): {
+  stop: () => void;
+  setRate: (rate: number) => void;
+} {
   const c = ensureCtx();
-  if (!c || muted) return () => {};
+  if (!c || muted) return { stop: () => {}, setRate: () => {} };
   const gain = c.createGain();
   gain.gain.setValueAtTime(0.0001, c.currentTime);
   gain.gain.exponentialRampToValueAtTime(peak, c.currentTime + 0.15);
@@ -202,7 +299,8 @@ export function motorWhir(peak: number): () => void {
   filter.type = "lowpass";
   filter.frequency.value = 900;
 
-  const oscs = [78, 81.5].map((freq) => {
+  const bases = [78, 81.5];
+  const oscs = bases.map((freq) => {
     const osc = c.createOscillator();
     osc.type = "sawtooth";
     osc.frequency.value = freq;
@@ -223,12 +321,20 @@ export function motorWhir(peak: number): () => void {
   filter.connect(gain);
   gain.connect(c.destination);
 
-  return () => {
-    const t = c.currentTime;
-    gain.gain.cancelScheduledValues(t);
-    gain.gain.setValueAtTime(Math.max(gain.gain.value, 0.0001), t);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-    oscs.forEach((osc) => osc.stop(t + 0.25));
-    lfo.stop(t + 0.25);
+  return {
+    stop: () => {
+      const t = c.currentTime;
+      gain.gain.cancelScheduledValues(t);
+      gain.gain.setValueAtTime(Math.max(gain.gain.value, 0.0001), t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      oscs.forEach((osc) => osc.stop(t + 0.25));
+      lfo.stop(t + 0.25);
+    },
+    setRate: (rate: number) => {
+      const t = c.currentTime;
+      oscs.forEach((osc, i) =>
+        osc.frequency.setValueAtTime(bases[i] * rate, t)
+      );
+    },
   };
 }

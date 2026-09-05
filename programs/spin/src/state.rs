@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use solana_sha256_hasher::hash;
 
 use crate::constants::*;
 
@@ -26,7 +27,7 @@ pub struct GameConfig {
     pub max_bet: u64,
     /// House edge in basis points (e.g. 200 = 2%).
     pub house_edge_bp: u16,
-    /// Game-specific params. For Neon Dice: [min_target u16][max_target u16] LE.
+    /// Game-specific params (reserved; grid/slot games ignore these).
     pub params: [u8; 32],
     pub bump: u8,
 }
@@ -122,7 +123,7 @@ pub struct PendingSpin {
     pub player: Pubkey,
     pub game_id: u8,
     pub amount: u64,
-    /// For Neon Dice: target threshold in [1, 9_800] (win if roll < target).
+    /// Games other than Dice ignored the target (frontends send 0).
     pub target: u64,
     /// The VRF request seed (also the `pending` PDA seed component).
     pub seed: [u8; 32],
@@ -136,6 +137,58 @@ pub struct PendingSpin {
 
 impl PendingSpin {
     pub const SIZE: usize = 8 + 32 + 1 + 8 + 8 + 32 + 1 + 8 + 32 + 1;
+}
+
+/// The house's instant reveal chain.
+///
+/// One global chain serves every game. The house commits to `length` reveals
+/// by publishing a `seed`: reveal *i* is `sha256(seed || i.to_le_bytes())`,
+/// and the chain is consumed in reverse order (index 0 first, i.e. the
+/// reveal for index 0 is `sha256(seed || 0x0000..0)`), so the house has no
+/// way to choose outcomes after the fact. Each `spin_chain` consumes exactly
+/// one reveal, which is passed as the instruction's `reveal` argument and
+/// must equal the current head — the chain's derived value at `index`. A
+/// concurrent spin that races for the same reveal gets `ChainStale` and the
+/// client simply refetches the next one.
+///
+/// The 64 bytes of randomness for outcome evaluation are
+/// `reveal || sha256(reveal)`, which a client can reproduce offline to
+/// verify any past spin against this account's seed and index.
+#[account]
+pub struct ChainState {
+    /// House authority that initialized the chain.
+    pub house: Pubkey,
+    /// Chain seed; reveal i = sha256(seed || i.to_le_bytes()).
+    pub seed: [u8; 32],
+    /// The next unconsumed reveal index (0..length).
+    pub index: u64,
+    /// Total number of reveals in this chain.
+    pub length: u64,
+    /// Whether the chain accepts spins.
+    pub active: bool,
+    /// When true, the legacy VRF betting path is accepted instead of the
+    /// chain. `init_chain` turns it off; `set_chain_mode` can restore it for
+    /// rollback. `spin_chain` rejects when it is true, and clients refuse to
+    /// call the VRF path when the chain exists and it is false.
+    pub vrf_enabled: bool,
+    pub bump: u8,
+}
+
+impl ChainState {
+    pub const SIZE: usize = 8 + 32 + 32 + 8 + 8 + 1 + 1 + 1;
+
+    /// The reveal the chain currently expects: sha256(seed || index LE).
+    pub fn head(&self) -> [u8; 32] {
+        chain_head(&self.seed, self.index)
+    }
+}
+
+/// reveal i = sha256(seed || i.to_le_bytes()).
+pub fn chain_head(seed: &[u8; 32], index: u64) -> [u8; 32] {
+    let mut input = [0u8; 40];
+    input[..32].copy_from_slice(seed);
+    input[32..].copy_from_slice(&index.to_le_bytes());
+    hash(&input).to_bytes()
 }
 
 // ---------------------------------------------------------------------------
@@ -348,4 +401,8 @@ pub fn player_vault_address(player: &Pubkey) -> Pubkey {
 
 pub fn credits_address() -> Pubkey {
     Pubkey::find_program_address(&[CREDITS_SEED], &crate::ID).0
+}
+
+pub fn chain_address() -> Pubkey {
+    Pubkey::find_program_address(&[CHAIN_SEED], &crate::ID).0
 }

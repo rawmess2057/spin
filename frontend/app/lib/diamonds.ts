@@ -45,7 +45,7 @@ export function parseDiamonds(input: string): bigint | null {
 /**
  * Chip buttons for a game, given its on-chain bet limits.
  *
- * The limits differ per game (devnet has dice at 1 SOL but the grid games at
+ * The limits differ per game (devnet has slots at 1 SOL but the grid games at
  * ~0.0146 SOL), so the ladder is filtered rather than hardcoded — otherwise a
  * chip would render that the program rejects.
  */

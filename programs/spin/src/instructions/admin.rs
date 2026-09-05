@@ -46,13 +46,6 @@ pub fn init_game_config(
     house_edge_bp: u16,
     params: [u8; 32],
 ) -> Result<()> {
-    require!(
-        matches!(
-            game_id,
-            GAME_DICE | GAME_SLOTS | GAME_PHARAOH | GAME_DRAGON | GAME_MINES
-        ),
-        SpinError::UnknownGame
-    );
     require!(min_bet > 0 && max_bet >= min_bet, SpinError::BetBelowMinimum);
     ctx.accounts.config.game_id = game_id;
     ctx.accounts.config.min_bet = min_bet;

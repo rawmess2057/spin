@@ -144,31 +144,72 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Prevent iOS double-tap zoom on game buttons */
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  /* Improved scrollbar for game containers */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 192, 87, 0.2);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 192, 87, 0.4);
   }
 }
 
-@keyframes spin-dice-tumble {
-  from {
-    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
-  }
+/* Performance: use composited transforms only for animated elements */
+.will-change-transform {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Glassmorphism utility for modern UI panels */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Gold shimmer for premium elements */
+.text-gold-shimmer {
+  background: linear-gradient(
+    90deg,
+    #ffc057 0%,
+    #ffe9a8 25%,
+    #ffc057 50%,
+    #b07000 75%,
+    #ffc057 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gold-shimmer 3s linear infinite;
+}
+
+@keyframes gold-shimmer {
   to {
-    transform: rotateX(360deg) rotateY(360deg) rotateZ(360deg);
+    background-position: -200% center;
   }
-}
-
-@keyframes grid-cell-drop {
-  from {
-    transform: translateY(-110%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.grid-cell-drop {
-  animation: grid-cell-drop 0.42s cubic-bezier(0.2, 0.8, 0.3, 1.1);
 }
 
 /*
@@ -197,8 +238,30 @@
   filter: blur(0.7px);
 }
 
+/*
+ * Slots win feedback. The bounce animates a copy of the winning symbol laid
+ * over the landed cell (the strip itself never re-renders); the delay per
+ * reel creates the left→right wave, and fill-mode both hides the copy until
+ * its turn. The glow ring underneath breathes while the win stays lit.
+ */
+
+/* Neon sweep along the payline once every reel has landed on a win. */
+@keyframes slots-payline-trace {
+  0% {
+    width: 0%;
+    opacity: 1;
+  }
+  70% {
+    width: 100%;
+    opacity: 1;
+  }
+  100% {
+    width: 100%;
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .grid-cell-drop,
   .grid-cell-spin {
     animation: none;
     filter: none;

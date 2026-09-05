@@ -135,8 +135,8 @@ export function Cashier({
             {diamondString(lamportsToDiamonds(credited))} 💎
           </p>
           <p className="text-[10px] text-muted">
-            = {solString(credited)} SOL · 1 💎 ={" "}
-            {solString(DIAMOND_LAMPORTS)} SOL
+            = {solString(credited)} SOL · 1 💎 = {solString(DIAMOND_LAMPORTS)}{" "}
+            SOL
           </p>
         </div>
         <div className="flex overflow-hidden rounded-sm border border-border-low">
@@ -221,9 +221,7 @@ export function Cashier({
             disabled={isSending || credited <= 0n}
             className="w-full cursor-pointer rounded-sm border border-gold/50 bg-transparent px-4 py-2.5 text-sm font-semibold text-gold transition hover:bg-gold/10 disabled:opacity-40"
           >
-            {isSending
-              ? "Confirming…"
-              : `Cash out ${solString(credited)} SOL`}
+            {isSending ? "Confirming…" : `Cash out ${solString(credited)} SOL`}
           </button>
         </div>
       )}

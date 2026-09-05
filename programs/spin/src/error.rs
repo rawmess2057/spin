@@ -48,4 +48,16 @@ pub enum SpinError {
     InsufficientCredits,
     #[msg("Withdrawal would leave the treasury unable to cover player credits")]
     TreasuryInsolvent,
+    #[msg("VRF betting is disabled; use the instant reveal chain")]
+    VrfBettingDisabled,
+    #[msg("The reveal chain is not active")]
+    ChainInactive,
+    #[msg("Reveal does not match the chain head; fetch the next reveal and retry")]
+    ChainStale,
+    #[msg("The reveal chain is exhausted; the house must initialize a new chain")]
+    ChainExhausted,
+    #[msg("Chain length is out of range")]
+    ChainTooLong,
+    #[msg("The current chain is not exhausted yet")]
+    ChainStillActive,
 }

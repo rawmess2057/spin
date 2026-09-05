@@ -35,12 +35,10 @@ export function useAddressSeed(address: Address | undefined): Uint8Array {
  */
 export function useVault(player: Address | undefined) {
   const seed = useAddressSeed(player);
-  const address = usePda(
-    SPIN_PROGRAM_ADDRESS,
-    ["vault", seed],
-    player != null
+  const address = usePda(SPIN_PROGRAM_ADDRESS, ["vault", seed], player != null);
+  return useAccountData(address, (data) =>
+    getPlayerVaultDecoder().decode(data)
   );
-  return useAccountData(address, (data) => getPlayerVaultDecoder().decode(data));
 }
 
 /** Global outstanding player credit — what the house owes players. */

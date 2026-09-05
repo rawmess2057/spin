@@ -33,7 +33,7 @@ export function Hero() {
           <span className="block text-gold">our hot jackpot</span>
         </h1>
         <Link
-          href="/slots"
+          href="/plinko"
           className="font-contrail mt-10 rounded-sm bg-gold px-12 py-4 text-lg uppercase tracking-wide text-gold-foreground shadow-[0_0_30px_rgba(255,192,87,0.45)] transition hover:brightness-110 hover:shadow-[0_0_44px_rgba(255,192,87,0.65)]"
         >
           Play now

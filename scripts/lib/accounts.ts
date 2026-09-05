@@ -48,6 +48,16 @@ export type PlayerVaultData = {
   bump: number;
 };
 
+export type ChainStateData = {
+  house: string;
+  seed: Uint8Array;
+  index: bigint;
+  length: bigint;
+  active: boolean;
+  vrfEnabled: boolean;
+  bump: number;
+};
+
 export type CreditLedgerData = {
   total: bigint;
   bump: number;
@@ -165,6 +175,19 @@ export function parsePlayerVault(d: Uint8Array): PlayerVaultData {
     delegateExpiry: u64At(d, off + 72),
     delegateSpendLeft: u64At(d, off + 80),
     bump: d[off + 88],
+  };
+}
+
+export function parseChainState(d: Uint8Array): ChainStateData {
+  const off = 8;
+  return {
+    house: pubkeySlice(d, off),
+    seed: d.slice(off + 32, off + 64),
+    index: u64At(d, off + 64),
+    length: u64At(d, off + 72),
+    active: d[off + 80] === 1,
+    vrfEnabled: d[off + 81] === 1,
+    bump: d[off + 82],
   };
 }
 

@@ -1,7 +1,6 @@
 import {
   createClient,
   extendClient,
-  fetchEncodedAccount,
   getProgramDerivedAddress,
   getU8Encoder,
   getUtf8Encoder,
@@ -24,18 +23,13 @@ import { walletSigner } from "@solana/kit-plugin-wallet";
 import { solanaRpc, rpcAirdrop } from "@solana/kit-plugin-rpc";
 import { systemProgram } from "@solana-program/system";
 import {
-  findPendingPda,
-  findVaultPda,
-  findVrfStatePda,
   getDepositInstructionAsync,
-  getPlaceBetInstructionAsync,
-  getRefundSpinInstructionAsync,
   getRevokeDelegateInstructionAsync,
   getSetDelegateInstructionAsync,
+  getSpinChainInstructionAsync,
   getWithdrawInstructionAsync,
   SPIN_PROGRAM_ADDRESS,
-  type PlaceBetAsyncInput,
-  type RefundSpinAsyncInput,
+  type SpinChainAsyncInput,
 } from "./generated/spin";
 import {
   CLUSTER_URLS,
@@ -43,12 +37,6 @@ import {
   WS_URLS,
   type ClusterMoniker,
 } from "./config";
-import {
-  decodeNetworkState,
-  findVrfClientPda,
-  findVrfNetworkStatePda,
-  findVrfRequestPda,
-} from "./vrf";
 
 export * from "./generated/spin";
 export type { ClusterMoniker };
@@ -72,19 +60,7 @@ export async function findGameConfigPda(gameId: number): Promise<Address> {
   return pda;
 }
 
-/** The ORAO VRF treasury is read from live network state, not a static PDA. */
-async function resolveVrfTreasury(
-  rpc: Parameters<typeof fetchEncodedAccount>[0]
-): Promise<Address> {
-  const networkState = await findVrfNetworkStatePda();
-  const account = await fetchEncodedAccount(rpc, networkState);
-  if (!account.exists) {
-    throw new Error("ORAO VRF network state account not found");
-  }
-  return decodeNetworkState(account.data).treasury;
-}
-
-export type PlaceBetInput = {
+export type SpinChainInput = {
   /** Whose vault the stake comes out of. */
   player: Address;
   /** Signs and pays: the player's wallet, or their session key. */
@@ -92,15 +68,7 @@ export type PlaceBetInput = {
   gameId: number;
   amount: bigint;
   target: bigint;
-  seed: Uint8Array;
-};
-
-export type RefundSpinInput = {
-  player: Address;
-  authority: TransactionSigner;
-  /** Who paid the pending account's rent and gets it back. */
-  rentPayer: Address;
-  seed: Uint8Array;
+  reveal: Uint8Array;
 };
 
 export type DepositInput = { player: TransactionSigner; amount: bigint };
@@ -122,14 +90,10 @@ export type SpinPluginRequirements = ClientWithRpc<
 
 export type SpinPlugin = {
   instructions: {
-    placeBet: (
-      input: PlaceBetInput
+    spinChain: (
+      input: SpinChainInput
     ) => SelfPlanAndSendFunctions &
-      Promise<Awaited<ReturnType<typeof getPlaceBetInstructionAsync>>>;
-    refundSpin: (
-      input: RefundSpinInput
-    ) => SelfPlanAndSendFunctions &
-      Promise<Awaited<ReturnType<typeof getRefundSpinInstructionAsync>>>;
+      Promise<Awaited<ReturnType<typeof getSpinChainInstructionAsync>>>;
     deposit: (
       input: DepositInput
     ) => SelfPlanAndSendFunctions &
@@ -149,47 +113,21 @@ export type SpinPlugin = {
   };
 };
 
-async function buildPlaceBetInstruction(
-  client: SpinPluginRequirements,
-  input: PlaceBetInput
-) {
-  const [config, vrfTreasury] = await Promise.all([
-    findGameConfigPda(input.gameId),
-    resolveVrfTreasury(client.rpc),
-  ]);
+async function buildSpinChainInstruction(input: SpinChainInput) {
   // `player` is a plain address and `authority` is the signer, so the codama
-  // PDA resolvers (vault, session) key off the player while the session key
-  // pays and signs.
-  const asyncInput: PlaceBetAsyncInput = {
+  // PDA resolvers (chain, vault, credits, session, treasury) key off the
+  // player while the session key pays and signs.
+  const config = await findGameConfigPda(input.gameId);
+  const asyncInput: SpinChainAsyncInput = {
     authority: input.authority,
     player: input.player,
     config,
-    vrfTreasury,
     gameId: input.gameId,
     amount: input.amount,
     target: input.target,
-    seed: input.seed,
+    reveal: input.reveal,
   };
-  return getPlaceBetInstructionAsync(asyncInput);
-}
-
-async function buildRefundSpinInstruction(input: RefundSpinInput) {
-  const [vrfState] = await findVrfStatePda();
-  const vrfClient = await findVrfClientPda(SPIN_PROGRAM_ADDRESS, vrfState);
-  const [request, [pending], [vault]] = await Promise.all([
-    findVrfRequestPda(vrfClient, input.seed),
-    findPendingPda({ seed: input.seed }),
-    findVaultPda({ player: input.player }),
-  ]);
-  const asyncInput: RefundSpinAsyncInput = {
-    authority: input.authority,
-    rentPayer: input.rentPayer,
-    vault,
-    request,
-    pending,
-    seed: input.seed,
-  };
-  return getRefundSpinInstructionAsync(asyncInput);
+  return getSpinChainInstructionAsync(asyncInput);
 }
 
 export function spinProgram(): <T extends SpinPluginRequirements>(
@@ -199,15 +137,10 @@ export function spinProgram(): <T extends SpinPluginRequirements>(
     const plugin: { spin: SpinPlugin } = {
       spin: {
         instructions: {
-          placeBet: (input) =>
+          spinChain: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              buildPlaceBetInstruction(client, input)
-            ),
-          refundSpin: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              buildRefundSpinInstruction(input)
+              buildSpinChainInstruction(input)
             ),
           deposit: (input) =>
             addSelfPlanAndSendFunctions(

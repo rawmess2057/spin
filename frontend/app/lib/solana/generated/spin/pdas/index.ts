@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./chain";
 export * from "./credits";
 export * from "./pending";
 export * from "./session";

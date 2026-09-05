@@ -60,6 +60,18 @@ export const SPIN_ERROR__DELEGATE_LIMIT_EXCEEDED = 0x1784; // 6020
 export const SPIN_ERROR__INSUFFICIENT_CREDITS = 0x1785; // 6021
 /** TreasuryInsolvent: Withdrawal would leave the treasury unable to cover player credits */
 export const SPIN_ERROR__TREASURY_INSOLVENT = 0x1786; // 6022
+/** VrfBettingDisabled: VRF betting is disabled; use the instant reveal chain */
+export const SPIN_ERROR__VRF_BETTING_DISABLED = 0x1787; // 6023
+/** ChainInactive: The reveal chain is not active */
+export const SPIN_ERROR__CHAIN_INACTIVE = 0x1788; // 6024
+/** ChainStale: Reveal does not match the chain head; fetch the next reveal and retry */
+export const SPIN_ERROR__CHAIN_STALE = 0x1789; // 6025
+/** ChainExhausted: The reveal chain is exhausted; the house must initialize a new chain */
+export const SPIN_ERROR__CHAIN_EXHAUSTED = 0x178a; // 6026
+/** ChainTooLong: Chain length is out of range */
+export const SPIN_ERROR__CHAIN_TOO_LONG = 0x178b; // 6027
+/** ChainStillActive: The current chain is not exhausted yet */
+export const SPIN_ERROR__CHAIN_STILL_ACTIVE = 0x178c; // 6028
 
 export type SpinError =
   | typeof SPIN_ERROR__ALREADY_RESOLVED
@@ -67,6 +79,11 @@ export type SpinError =
   | typeof SPIN_ERROR__BET_ABOVE_MAXIMUM
   | typeof SPIN_ERROR__BET_BELOW_MINIMUM
   | typeof SPIN_ERROR__BET_EXCEEDS_BANKROLL_LIMIT
+  | typeof SPIN_ERROR__CHAIN_EXHAUSTED
+  | typeof SPIN_ERROR__CHAIN_INACTIVE
+  | typeof SPIN_ERROR__CHAIN_STALE
+  | typeof SPIN_ERROR__CHAIN_STILL_ACTIVE
+  | typeof SPIN_ERROR__CHAIN_TOO_LONG
   | typeof SPIN_ERROR__CLIENT_MISMATCH
   | typeof SPIN_ERROR__DELEGATE_EXPIRED
   | typeof SPIN_ERROR__DELEGATE_LIMIT_EXCEEDED
@@ -84,7 +101,8 @@ export type SpinError =
   | typeof SPIN_ERROR__TREASURY_BALANCE_TOO_LOW
   | typeof SPIN_ERROR__TREASURY_INSOLVENT
   | typeof SPIN_ERROR__TREASURY_MISMATCH
-  | typeof SPIN_ERROR__UNKNOWN_GAME;
+  | typeof SPIN_ERROR__UNKNOWN_GAME
+  | typeof SPIN_ERROR__VRF_BETTING_DISABLED;
 
 let spinErrorMessages: Record<SpinError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
@@ -94,6 +112,11 @@ if (process.env["NODE_ENV"] !== "production") {
     [SPIN_ERROR__BET_ABOVE_MAXIMUM]: `Bet above maximum`,
     [SPIN_ERROR__BET_BELOW_MINIMUM]: `Bet below minimum`,
     [SPIN_ERROR__BET_EXCEEDS_BANKROLL_LIMIT]: `Bet exceeds the house bankroll limit (1% of treasury)`,
+    [SPIN_ERROR__CHAIN_EXHAUSTED]: `The reveal chain is exhausted; the house must initialize a new chain`,
+    [SPIN_ERROR__CHAIN_INACTIVE]: `The reveal chain is not active`,
+    [SPIN_ERROR__CHAIN_STALE]: `Reveal does not match the chain head; fetch the next reveal and retry`,
+    [SPIN_ERROR__CHAIN_STILL_ACTIVE]: `The current chain is not exhausted yet`,
+    [SPIN_ERROR__CHAIN_TOO_LONG]: `Chain length is out of range`,
     [SPIN_ERROR__CLIENT_MISMATCH]: `Client PDA does not match the registered VRF client`,
     [SPIN_ERROR__DELEGATE_EXPIRED]: `Delegate authorization has expired`,
     [SPIN_ERROR__DELEGATE_LIMIT_EXCEEDED]: `Bet exceeds the delegate's remaining spend limit`,
@@ -112,6 +135,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [SPIN_ERROR__TREASURY_INSOLVENT]: `Withdrawal would leave the treasury unable to cover player credits`,
     [SPIN_ERROR__TREASURY_MISMATCH]: `Treasury account does not match the network configuration`,
     [SPIN_ERROR__UNKNOWN_GAME]: `Unknown game`,
+    [SPIN_ERROR__VRF_BETTING_DISABLED]: `VRF betting is disabled; use the instant reveal chain`,
   };
 }
 
