@@ -245,6 +245,54 @@
  * its turn. The glow ring underneath breathes while the win stays lit.
  */
 
+/*
+ * Plinko feedback. `result-pop` scales the landing chip in over the board;
+ * `win-pop` makes each recent-drop pill pop as it appears in the history
+ * strip. Both respect reduced motion below.
+ */
+@keyframes result-pop {
+  0% {
+    transform: translateY(-10px) scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(2px) scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.result-pop {
+  animation: result-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes win-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.win-pop {
+  animation: win-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Hides scrollbars on overflow rows (history strip) while keeping scroll. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Neon sweep along the payline once every reel has landed on a win. */
 @keyframes slots-payline-trace {
   0% {
@@ -265,5 +313,9 @@
   .grid-cell-spin {
     animation: none;
     filter: none;
+  }
+  .result-pop,
+  .win-pop {
+    animation: none;
   }
 }

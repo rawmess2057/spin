@@ -17,22 +17,46 @@ const RISKS: PlinkoRisk[] = [
   PLINKO_RISK.HIGH,
 ];
 
+/** Risk colour coding: gentler variance reads green, aggressive reads red. */
+const RISK_COLORS: Record<PlinkoRisk, string> = {
+  [PLINKO_RISK.LOW]: "#1fd18a",
+  [PLINKO_RISK.MED]: "#ffc057",
+  [PLINKO_RISK.HIGH]: "#ff4d5e",
+};
+
 export function RiskSelector({ value, onChange }: Props) {
   return (
-    <div className="flex w-full overflow-hidden rounded-lg border border-border-low bg-card">
+    <div className="flex w-full gap-1 rounded-xl border border-border-low bg-background/50 p-1">
       {RISKS.map((r) => {
         const active = value === r;
+        const color = RISK_COLORS[r];
         return (
           <button
             key={r}
             type="button"
             onClick={() => onChange(r)}
-            className={`flex-1 cursor-pointer py-2 text-xs font-bold uppercase tracking-wide transition ${
+            aria-pressed={active}
+            className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-extrabold uppercase tracking-wider transition-all duration-150"
+            style={
               active
-                ? "bg-primary text-primary-foreground"
-                : "text-muted hover:bg-cream"
-            }`}
+                ? {
+                    background: color,
+                    color: "#0b0b10",
+                    boxShadow: `0 0 14px ${color}66`,
+                  }
+                : {
+                    color: "var(--muted)",
+                  }
+            }
           >
+            <span
+              className="h-2 w-2 rounded-full transition"
+              style={{
+                background: color,
+                boxShadow: active ? "none" : `0 0 6px ${color}aa`,
+                opacity: active ? 1 : 0.75,
+              }}
+            />
             {PLINKO_RISK_NAMES[r]}
           </button>
         );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   diamondChips,
@@ -8,16 +8,15 @@ import {
   diamondsToLamports,
   lamportsToDiamonds,
   parseDiamonds,
+  defaultBet,
 } from "../../lib/diamonds";
+import { haptic } from "../../lib/sound/events";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { RiskSelector } from "./plinko-risk-selector";
 import { RowSelector } from "./plinko-row-selector";
-import { PlinkoLastWins, type WinRecord } from "./plinko-last-wins";
 import {
-  PLINKO_RISK,
   type PlinkoConfig,
-  type PlinkoOutcome,
   plinkoEncodeTarget,
 } from "../../lib/solana/games/plinko";
 
@@ -37,52 +36,54 @@ type SpinSurface = {
 type Props = {
   config: PlinkoConfig;
   onConfigChange: (config: PlinkoConfig) => void;
-  lastOutcome: PlinkoOutcome | null;
-  lastBet: bigint | null;
   spin: SpinSurface;
 };
 
-export function PlinkoControls({
-  config,
-  onConfigChange,
-  lastOutcome,
-  lastBet,
-  spin,
-}: Props) {
-  const [input, setInput] = useState("");
-  const [wins, setWins] = useState<WinRecord[]>([]);
-  const lastSeenOutcomeRef = useRef<PlinkoOutcome | null>(null);
-
-  // Record each newly resolved spin into the recent-wins history. We compare
-  // by object identity because the hook creates a fresh outcome per spin.
-  useEffect(() => {
-    if (lastOutcome == null || lastOutcome === lastSeenOutcomeRef.current) {
-      return;
-    }
-    lastSeenOutcomeRef.current = lastOutcome;
-    setWins((prev) => [
-      ...prev,
-      {
-        bucket: lastOutcome.bucket,
-        rowCount: config.rows,
-        multiplierBp: lastOutcome.multiplierBp,
-      },
-    ]);
-  }, [lastOutcome, config.rows]);
-
-  // Default bet from the config's limits whenever they're first available.
-  const chips = useMemo(
-    () => diamondChips(spin.minBet, spin.maxBet),
-    [spin.minBet, spin.maxBet]
+function FieldLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
+      {children}
+    </div>
   );
-  const defaultBetD =
-    spin.minBet != null ? chips[Math.min(1, chips.length - 1)] : null;
+}
+
+export function PlinkoControls({ config, onConfigChange, spin }: Props) {
+  const [input, setInput] = useState("");
+  const seededDefault = useRef(false);
+
+  // Bet limits arrive in lamports; the bet box and chips work in diamonds.
+  const minD = spin.minBet == null ? null : lamportsToDiamonds(spin.minBet);
+  const maxD = spin.maxBet == null ? null : lamportsToDiamonds(spin.maxBet);
+  const chips = useMemo(() => diamondChips(minD, maxD), [minD, maxD]);
+  const defaultBetD = useMemo(() => defaultBet(minD, maxD), [minD, maxD]);
+
+  // Pre-fill the box with a sensible bet as soon as the chain limits arrive,
+  // so the big button is immediately playable (Stake-style).
+  useEffect(() => {
+    if (!seededDefault.current && defaultBetD != null) {
+      seededDefault.current = true;
+      setInput(diamondString(defaultBetD));
+    }
+  }, [defaultBetD]);
 
   const betLamports = useMemo(() => {
     if (!input) return null;
     const d = parseDiamonds(input);
     return d == null ? null : diamondsToLamports(d);
   }, [input]);
+
+  const currentD = betLamports == null ? null : lamportsToDiamonds(betLamports);
+
+  /** Halves or doubles the bet box, clamped to the chain's [min, max]. */
+  const scaleBet = (dir: -1 | 1) => {
+    const base = currentD ?? defaultBetD;
+    if (base == null) return;
+    let next = dir === -1 ? (base / 2n > 0n ? base / 2n : 1n) : base * 2n;
+    if (minD != null && next < minD) next = minD;
+    if (maxD != null && next > maxD) next = maxD;
+    setInput(diamondString(next));
+    haptic("light");
+  };
 
   const errors = spin.betErrors(betLamports);
   const canDrop =
@@ -93,18 +94,17 @@ export function PlinkoControls({
 
   const drop = async () => {
     if (betLamports == null) return;
+    haptic("medium");
     spin.reset();
     const ok = await spin.placeBet(betLamports, plinkoEncodeTarget(config));
     if (!ok) return;
-    // outcome is surfaced via useVaultSpin -> lastOutcome (parent wiring);
-    // this panel just triggers the bet.
-    setInput("");
+    // Outcome surfaces via useVaultSpin -> board drop + landing overlay.
   };
 
   // --- Auto-play -------------------------------------------------------------
-  // Auto-play places one on-chain bet after another (the bet box value, falling
-  // back to the default chip when the box is empty), gated so it never overlaps
-  // a transaction and stops before it can prompt the wallet or spend past its
+  // Places one on-chain bet after another (the bet box value, falling back to
+  // the default chip when the box is empty), gated so it never overlaps a
+  // transaction and stops before it can prompt the wallet or spend past its
   // budget.
   const [auto, setAuto] = useState(false);
   const [drops, setDrops] = useState<number | null>(null); // null = unlimited
@@ -117,7 +117,12 @@ export function PlinkoControls({
     return defaultBetD == null ? null : diamondsToLamports(defaultBetD);
   }, [betLamports, defaultBetD]);
 
-  const startAuto = () => {
+  const toggleAuto = () => {
+    if (auto) {
+      stopAuto();
+      return;
+    }
+    haptic("light");
     autoPlaysLeftRef.current = drops;
     setAutoPlaysLeft(drops);
     setAuto(true);
@@ -158,172 +163,210 @@ export function PlinkoControls({
         setAutoPlaysLeft(autoPlaysLeftRef.current);
       }
       spin.reset();
+      haptic("light");
       void spin.placeBet(autoBetLamports, plinkoEncodeTarget(config));
-    }, 600);
+    }, 650);
     return () => clearInterval(iv);
   }, [auto, spin, autoBetLamports, config]);
 
+  const balanceLabel =
+    spin.balance == null
+      ? "—"
+      : diamondString(lamportsToDiamonds(spin.balance));
+
+  const busy = spin.rolling || spin.isSending;
+  const betButtonLabel = busy
+    ? "Dropping ball…"
+    : currentD != null
+      ? `Bet ${diamondString(currentD)} 💎`
+      : "Bet";
+
   return (
     <Card className="mx-auto w-full max-w-2xl p-4 sm:p-5">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Risk
-          </label>
-          <RiskSelector
-            value={config.risk}
-            onChange={(risk) => onConfigChange({ ...config, risk })}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted">
-            Rows
-          </label>
-          <RowSelector
-            value={config.rows}
-            onChange={(rows) => onConfigChange({ ...config, rows })}
-          />
+      {/* Bet amount ------------------------------------------------------- */}
+      <div className="flex items-baseline justify-between">
+        <FieldLabel>Bet amount</FieldLabel>
+        <div className="mb-1.5 flex items-baseline gap-1 text-[11px] font-semibold text-muted">
+          Balance
+          <span className="font-mono text-xs font-bold text-foreground">
+            {balanceLabel}
+          </span>
+          <span className="text-[11px]">💎</span>
         </div>
       </div>
 
-      <div className="mt-4">
-        <div className="mb-1 flex items-baseline justify-between">
-          <label className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Bet
-          </label>
-          <span className="text-xs text-muted">
-            Balance:{" "}
-            <span className="font-mono text-foreground">
-              {spin.balance == null
-                ? "—"
-                : `${diamondString(lamportsToDiamonds(spin.balance))} 💎`}
-            </span>
-          </span>
-        </div>
+      <div className="flex items-stretch overflow-hidden rounded-xl border border-border-low bg-background/60 transition focus-within:border-primary/60">
+        <button
+          type="button"
+          onClick={() => scaleBet(-1)}
+          disabled={busy}
+          aria-label="Halve bet"
+          className="cursor-pointer border-r border-border-low px-3 text-base font-bold text-muted transition hover:bg-cream hover:text-foreground disabled:opacity-40"
+        >
+          ½
+        </button>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           inputMode="numeric"
-          placeholder={
-            defaultBetD == null
-              ? "Bet (💎)"
-              : `Bet (e.g. ${diamondString(defaultBetD)} 💎)`
-          }
-          className="w-full rounded-lg border border-border-low bg-background px-3 py-2.5 font-mono text-sm outline-none focus:border-primary disabled:opacity-50"
-          disabled={spin.rolling || spin.isSending}
+          autoComplete="off"
+          spellCheck={false}
+          aria-label="Bet amount in diamonds"
+          className="w-full min-w-0 flex-1 bg-transparent px-2 py-2.5 text-center font-mono text-base font-bold tabular-nums outline-none placeholder:text-muted-foreground disabled:opacity-50"
+          placeholder="Bet (💎)"
+          disabled={busy}
         />
-        {chips.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {chips.map((c) => (
-              <button
-                key={c.toString()}
-                type="button"
-                onClick={() => setInput(diamondString(c))}
-                className="cursor-pointer rounded-md border border-border-low bg-cream/40 px-2.5 py-1 text-xs font-medium transition hover:bg-cream"
-              >
-                {diamondString(c)}
-              </button>
-            ))}
-          </div>
-        )}
-        {errors.length > 0 && (
-          <ul className="mt-2 space-y-0.5 text-xs text-destructive">
-            {errors.map((e) => (
-              <li key={e}>{e}</li>
-            ))}
-          </ul>
-        )}
+        <button
+          type="button"
+          onClick={() => scaleBet(1)}
+          disabled={busy}
+          aria-label="Double bet"
+          className="cursor-pointer border-l border-border-low px-3 text-base font-bold text-muted transition hover:bg-cream hover:text-foreground disabled:opacity-40"
+        >
+          2×
+        </button>
       </div>
 
+      {chips.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {chips.map((c) => (
+            <button
+              key={c.toString()}
+              type="button"
+              onClick={() => {
+                setInput(diamondString(c));
+                haptic("light");
+              }}
+              disabled={busy}
+              className={`cursor-pointer rounded-md border px-2.5 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
+                currentD === c
+                  ? "border-primary/70 bg-primary/15 text-primary"
+                  : "border-border-low bg-card text-muted hover:bg-cream hover:text-foreground"
+              }`}
+            >
+              {diamondString(c)}
+            </button>
+          ))}
+          <span className="ml-auto text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            {minD != null ? `min ${diamondString(minD)}` : ""}
+          </span>
+        </div>
+      )}
+
+      {errors.length > 0 && (
+        <ul className="mt-2 space-y-0.5 text-xs text-destructive">
+          {errors.map((e) => (
+            <li key={e}>{e}</li>
+          ))}
+        </ul>
+      )}
+
+      {/* Risk + rows ------------------------------------------------------ */}
+      <div className="mt-4">
+        <FieldLabel>Risk</FieldLabel>
+        <RiskSelector
+          value={config.risk}
+          onChange={(risk) => onConfigChange({ ...config, risk })}
+        />
+      </div>
+
+      <div className="mt-3">
+        <FieldLabel>Rows</FieldLabel>
+        <RowSelector
+          value={config.rows}
+          onChange={(rows) => onConfigChange({ ...config, rows })}
+        />
+      </div>
+
+      {/* Big drop button -------------------------------------------------- */}
       <Button
-        className="mt-4 w-full py-3 text-base"
+        className="mt-4 h-12 w-full text-base"
         onClick={drop}
         disabled={!canDrop}
       >
-        {spin.rolling || spin.isSending
-          ? "Dropping…"
-          : lastOutcome != null
-            ? "Drop again"
-            : "Drop ball"}
+        {betButtonLabel}
       </Button>
+      <p className="mt-1.5 text-center text-[11px] leading-snug text-muted-foreground">
+        {busy
+          ? "Settling your drop on-chain — hang tight."
+          : "Every drop is settled on-chain from a provably fair reveal."}
+      </p>
 
-      <div className="mt-4 rounded-lg border border-border-low bg-cream/30 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-widest text-muted">
+      {/* Auto play -------------------------------------------------------- */}
+      <div className="mt-4 overflow-hidden rounded-xl border border-border-low bg-cream/25">
+        <button
+          type="button"
+          onClick={toggleAuto}
+          disabled={busy && !auto}
+          className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-cream/40 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span>
+            <span className="block text-sm font-bold text-foreground">
               Auto play
-            </div>
-            <div className="text-xs text-muted">
+            </span>
+            <span className="block text-[11px] leading-snug text-muted">
               {auto
                 ? autoPlaysLeft == null
                   ? "Playing until stopped…"
                   : `Drops left: ${Math.max(0, autoPlaysLeft)}`
-                : "Drops one ball after another."}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {!auto && (
+                : "Drop one ball after another."}
+            </span>
+          </span>
+          <span
+            aria-hidden="true"
+            className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors ${
+              auto
+                ? "border-primary bg-primary"
+                : "border-border-low bg-background"
+            }`}
+          >
+            <span
+              className={`absolute top-1/2 h-4.5 w-4.5 -translate-y-1/2 rounded-full bg-foreground shadow transition-all ${
+                auto ? "left-[calc(100%-1.3rem)]" : "left-0.5"
+              }`}
+            />
+          </span>
+        </button>
+
+        <div className="flex items-center justify-between gap-2 border-t border-border-low bg-background/30 px-3 py-2">
+          {auto ? (
+            <>
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted">
+                {autoPlaysLeft == null
+                  ? "∞ unlimited"
+                  : `${Math.max(0, autoPlaysLeft)} left`}
+              </span>
+              <Button
+                className="px-3 py-1 text-[11px]"
+                variant="destructive"
+                onClick={() => stopAuto()}
+              >
+                Stop auto
+              </Button>
+            </>
+          ) : (
+            <>
               <div className="flex overflow-hidden rounded-md border border-border-low">
                 {[null, 5, 10, 25].map((n) => (
                   <button
                     key={n == null ? "unlimited" : n}
                     type="button"
                     onClick={() => setDrops(n)}
-                    className={`px-2 py-1 text-xs font-medium transition ${
+                    className={`px-2.5 py-1 text-[11px] font-bold transition ${
                       drops === n
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-cream/40 hover:bg-cream"
+                        ? "bg-primary/20 text-primary"
+                        : "text-muted hover:bg-cream hover:text-foreground"
                     }`}
                   >
                     {n == null ? "∞" : n}
                   </button>
                 ))}
               </div>
-            )}
-            <Button
-              className="px-3 py-1.5 text-xs"
-              variant={auto ? "destructive" : "primary"}
-              onClick={auto ? () => stopAuto() : startAuto}
-              disabled={auto ? false : spin.isSending || spin.rolling}
-            >
-              {auto ? "Stop" : "Auto"}
-            </Button>
-          </div>
-        </div>
-        <p className="mt-2 text-[11px] leading-snug text-muted">
-          Each drop is a real on-chain bet at your set amount. Auto-play needs
-          an active session (avoiding wallet prompts), takes care to never
-          overlap a transaction, and stops automatically when your session spend
-          limit or balance runs out.
-        </p>
-      </div>
-
-      {lastOutcome != null && lastBet != null && (
-        <div className="mt-4 rounded-lg border border-border-low bg-cream/30 p-3 text-center">
-          <p className="text-xs uppercase tracking-widest text-muted">
-            Last result · {config.rows}-row{" "}
-            {config.risk === PLINKO_RISK.LOW
-              ? "low"
-              : config.risk === PLINKO_RISK.MED
-                ? "med"
-                : "high"}
-          </p>
-          <p className="mt-1 font-mono text-xl font-bold tabular-nums text-primary">
-            {diamondString(lamportsToDiamonds(lastBet))} 💎 →{" "}
-            {lastOutcome.payout >= lastBet ? "+" : ""}
-            {diamondString(lamportsToDiamonds(lastOutcome.payout))} 💎
-          </p>
-          <p className="text-xs text-muted">
-            Bucket {lastOutcome.bucket} ·{" "}
-            {(Number(lastOutcome.multiplierBp) / 10000).toFixed(2)}×
-          </p>
-        </div>
-      )}
-
-      <div className="mt-4 flex items-center gap-3">
-        <PlinkoLastWins records={wins} />
-        <div className="text-xs uppercase tracking-widest text-muted">
-          Recent drops
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                drops
+              </span>
+            </>
+          )}
         </div>
       </div>
     </Card>

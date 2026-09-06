@@ -55,9 +55,24 @@ export function boardWidth(rows: number): number {
   return (count - 1) * PEG_SPACING_X;
 }
 
-/** Total board height: top padding + (rows + 1) peg rows + bucket band. */
+/** Vertical gap between the last peg row and the top of the bucket band. */
+export const COLLECTOR_MARGIN = PEG_SPACING_Y * 0.42;
+
+/** Height of the colored bucket band (the "collector" chips). */
+export const BUCKET_HEIGHT = PEG_SPACING_Y * 0.95;
+
+/** Space below the bucket band reserved for the multiplier labels. */
+export const LABEL_PAD = 14;
+
+/** Top edge (board space) of the bucket band for a given row count. */
+export function collectorTop(rows: number): number {
+  // Last play row sits at y = rows * PEG_SPACING_Y; the band follows it.
+  return TOP_PAD + rows * PEG_SPACING_Y + COLLECTOR_MARGIN;
+}
+
+/** Total board height: top padding + play rows + bucket band + label strip. */
 export function boardHeight(rows: number): number {
-  return TOP_PAD + (rows + 1) * PEG_SPACING_Y;
+  return collectorTop(rows) + BUCKET_HEIGHT + LABEL_PAD;
 }
 
 /** Horizontal center x of the collector row's i-th bucket (0..rows). */
@@ -65,6 +80,11 @@ export function bucketX(rows: number, bucket: number): number {
   const count = rows + 1;
   const offsetX = -((count - 1) * PEG_SPACING_X) / 2;
   return offsetX + bucket * PEG_SPACING_X;
+}
+
+/** Vertical center of a bucket chip. */
+export function bucketCenterY(rows: number): number {
+  return collectorTop(rows) + BUCKET_HEIGHT / 2;
 }
 
 /** Actual peg center at a given row and column in board space. */
