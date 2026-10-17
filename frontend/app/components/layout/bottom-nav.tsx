@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BalancePill } from "../vault/balance-pill";
 
 const TABS = [
   { href: "/", label: "Home", icon: "🏠" },
@@ -31,6 +32,9 @@ export function BottomNav() {
             </Link>
           );
         })}
+        <div className="flex flex-1 items-stretch justify-center text-muted">
+          <BalancePill compact />
+        </div>
       </div>
     </nav>
   );

@@ -14,6 +14,8 @@ import {
   getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
+  getU64Decoder,
+  getU64Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
   SolanaError,
   transformEncoder,
@@ -78,13 +80,19 @@ export type InitCreditsInstruction<
     ]
   >;
 
-export type InitCreditsInstructionData = { discriminator: ReadonlyUint8Array };
+export type InitCreditsInstructionData = {
+  discriminator: ReadonlyUint8Array;
+  initialTotal: bigint;
+};
 
-export type InitCreditsInstructionDataArgs = {};
+export type InitCreditsInstructionDataArgs = { initialTotal: number | bigint };
 
 export function getInitCreditsInstructionDataEncoder(): FixedSizeEncoder<InitCreditsInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
+    getStructEncoder([
+      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
+      ["initialTotal", getU64Encoder()],
+    ]),
     (value) => ({ ...value, discriminator: INIT_CREDITS_DISCRIMINATOR })
   );
 }
@@ -92,6 +100,7 @@ export function getInitCreditsInstructionDataEncoder(): FixedSizeEncoder<InitCre
 export function getInitCreditsInstructionDataDecoder(): FixedSizeDecoder<InitCreditsInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
+    ["initialTotal", getU64Decoder()],
   ]);
 }
 
@@ -115,6 +124,7 @@ export type InitCreditsAsyncInput<
   treasury?: Address<TAccountTreasury>;
   credits?: Address<TAccountCredits>;
   systemProgram?: Address<TAccountSystemProgram>;
+  initialTotal: InitCreditsInstructionDataArgs["initialTotal"];
 };
 
 export async function getInitCreditsInstructionAsync<
@@ -155,6 +165,9 @@ export async function getInitCreditsInstructionAsync<
     ResolvedInstructionAccount
   >;
 
+  // Original args.
+  const args = { ...input };
+
   // Resolve default values.
   if (!accounts.treasury.value) {
     accounts.treasury.value = await findTreasuryPda();
@@ -175,7 +188,9 @@ export async function getInitCreditsInstructionAsync<
       getAccountMeta("credits", accounts.credits),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getInitCreditsInstructionDataEncoder().encode({}),
+    data: getInitCreditsInstructionDataEncoder().encode(
+      args as InitCreditsInstructionDataArgs
+    ),
     programAddress,
   } as InitCreditsInstruction<
     TProgramAddress,
@@ -196,6 +211,7 @@ export type InitCreditsInput<
   treasury: Address<TAccountTreasury>;
   credits: Address<TAccountCredits>;
   systemProgram?: Address<TAccountSystemProgram>;
+  initialTotal: InitCreditsInstructionDataArgs["initialTotal"];
 };
 
 export function getInitCreditsInstruction<
@@ -234,6 +250,9 @@ export function getInitCreditsInstruction<
     ResolvedInstructionAccount
   >;
 
+  // Original args.
+  const args = { ...input };
+
   // Resolve default values.
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
@@ -248,7 +267,9 @@ export function getInitCreditsInstruction<
       getAccountMeta("credits", accounts.credits),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getInitCreditsInstructionDataEncoder().encode({}),
+    data: getInitCreditsInstructionDataEncoder().encode(
+      args as InitCreditsInstructionDataArgs
+    ),
     programAddress,
   } as InitCreditsInstruction<
     TProgramAddress,

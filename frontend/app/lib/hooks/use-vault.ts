@@ -3,9 +3,12 @@
 import { useMemo } from "react";
 import { getAddressEncoder, type Address } from "@solana/kit";
 import {
+  BetStatus,
+  getBetStateDecoder,
   getCreditLedgerDecoder,
   getPlayerVaultDecoder,
   SPIN_PROGRAM_ADDRESS,
+  type BetState,
 } from "../solana/client";
 import { usePda } from "./use-pda";
 import { useAccountData } from "./use-account-data";
@@ -28,7 +31,7 @@ export function useAddressSeed(address: Address | undefined): Uint8Array {
 /**
  * The player's credit vault. Streams over `accountNotifications`, so the
  * balance updates on its own the moment a bet is placed or a win is credited
- * by the VRF callback — nothing needs to poll.
+ * by the settlement — nothing needs to poll.
  *
  * `data == null` means the player has never deposited, which is the signal to
  * show the buy-in flow rather than the game.
@@ -41,10 +44,27 @@ export function useVault(player: Address | undefined) {
   );
 }
 
-/** Global outstanding player credit — what the house owes players. */
+/** Global ledger: what the house owes players + payouts reserved by open bets. */
 export function useCreditLedger() {
-  const address = usePda(SPIN_PROGRAM_ADDRESS, ["credits"]);
+  const address = usePda(SPIN_PROGRAM_ADDRESS, ["ledger"]);
   return useAccountData(address, (data) =>
     getCreditLedgerDecoder().decode(data)
   );
+}
+
+/**
+ * The player's bet account (`["bet", player]`): their one open bet, or the
+ * last settled one. Streams, so settlement shows up without polling.
+ */
+export function useBetAccount(player: Address | undefined) {
+  const seed = useAddressSeed(player);
+  const address = usePda(SPIN_PROGRAM_ADDRESS, ["bet", seed], player != null);
+  const account = useAccountData(address, (data) =>
+    getBetStateDecoder().decode(data)
+  );
+  const openBet: BetState | null =
+    account.data != null && account.data.status === BetStatus.Open
+      ? account.data
+      : null;
+  return { ...account, openBet };
 }

@@ -1,10 +1,10 @@
 /**
  * Plinko client-side evaluator.
  *
- * Mirrors the on-chain evaluator (programs/spin/src/instructions/bet.rs and
- * constants.rs) byte-for-byte so the outcome a player sees animating on the
- * board is exactly what the program settled. The path is derived directly
- * from the reveal-chain randomness; both halves read the same bits.
+ * Mirrors the on-chain evaluator (programs/spin/src/games/plinko.rs)
+ * byte-for-byte so the outcome a player sees animating on the board is
+ * exactly what the program settled. The path is derived directly from the
+ * bet's randomness; both halves read the same bits.
  */
 
 export const GAME_PLINKO = 7;
@@ -147,6 +147,7 @@ export function plinkoEncodeTarget(config: PlinkoConfig): bigint {
 
 /** Decodes `target` into a config; null if out of range. */
 export function plinkoDecodeTarget(target: bigint): PlinkoConfig | null {
+  if (target >> 16n !== 0n) return null;
   const rows = Number((target >> 8n) & 0xffn);
   const risk = Number(target & 0xffn) as PlinkoRisk;
   if (
@@ -168,6 +169,13 @@ export function plinkoMultiplierBp(
   const table = plinkoTable(rows, risk);
   if (table == null || bucket < 0 || bucket > rows) return 0n;
   return BigInt(table[bucket]) * 100n;
+}
+
+/** The table's edge bucket is its maximum; mirrors `plinko::max_multiplier_bp`. */
+export function plinkoMaxMultiplierBp(target: bigint): bigint {
+  const cfg = plinkoDecodeTarget(target);
+  if (cfg == null) return 0n;
+  return plinkoMultiplierBp(cfg.rows, cfg.risk, 0);
 }
 
 /** Mirrors the program's integer payout (amount * bp / 10_000, truncated). */

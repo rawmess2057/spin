@@ -24,7 +24,7 @@ import {
 } from "../lib/solana/games/megaways";
 import { diamondString, lamportsToDiamonds } from "../lib/diamonds";
 import { WIN_TIER_LABEL, type WinTier } from "../lib/win-tiers";
-import { hexToBytes } from "../lib/solana/chain";
+import { hexToBytes } from "../lib/solana/fairness";
 import { MegawaysControls } from "../components/megaways/megaways-controls";
 import {
   MegawaysHistory,

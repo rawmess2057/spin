@@ -34,14 +34,15 @@ import {
   type SelfPlanAndSendFunctions,
 } from "@solana/program-client-core";
 import {
+  getBetStateCodec,
   getChainStateCodec,
   getCreditLedgerCodec,
   getGameConfigCodec,
   getHouseTreasuryCodec,
-  getPendingSpinCodec,
   getPlayerSessionCodec,
   getPlayerVaultCodec,
-  getVrfStateCodec,
+  type BetState,
+  type BetStateArgs,
   type ChainState,
   type ChainStateArgs,
   type CreditLedger,
@@ -50,109 +51,118 @@ import {
   type GameConfigArgs,
   type HouseTreasury,
   type HouseTreasuryArgs,
-  type PendingSpin,
-  type PendingSpinArgs,
   type PlayerSession,
   type PlayerSessionArgs,
   type PlayerVault,
   type PlayerVaultArgs,
-  type VrfState,
-  type VrfStateArgs,
 } from "../accounts";
 import {
+  getCancelBetInstructionAsync,
   getDepositInstructionAsync,
   getInitChainInstructionAsync,
   getInitConfigInstructionAsync,
   getInitCreditsInstructionAsync,
   getInitGameConfigInstruction,
   getPlaceBetInstructionAsync,
-  getRefundSpinInstructionAsync,
-  getResolveSpinInstructionAsync,
   getRevokeDelegateInstructionAsync,
-  getSetChainModeInstructionAsync,
+  getRotateChainInstructionAsync,
+  getSetChainActiveInstructionAsync,
   getSetDelegateInstructionAsync,
+  getSetGameLimitsInstruction,
   getSetPausedInstructionAsync,
-  getSpinChainInstructionAsync,
+  getSettleBetInstructionAsync,
   getTreasuryDepositInstructionAsync,
   getTreasuryWithdrawInstructionAsync,
   getWithdrawInstructionAsync,
+  parseCancelBetInstruction,
   parseDepositInstruction,
   parseInitChainInstruction,
   parseInitConfigInstruction,
   parseInitCreditsInstruction,
   parseInitGameConfigInstruction,
   parsePlaceBetInstruction,
-  parseRefundSpinInstruction,
-  parseResolveSpinInstruction,
   parseRevokeDelegateInstruction,
-  parseSetChainModeInstruction,
+  parseRotateChainInstruction,
+  parseSetChainActiveInstruction,
   parseSetDelegateInstruction,
+  parseSetGameLimitsInstruction,
   parseSetPausedInstruction,
-  parseSpinChainInstruction,
+  parseSettleBetInstruction,
   parseTreasuryDepositInstruction,
   parseTreasuryWithdrawInstruction,
   parseWithdrawInstruction,
+  type CancelBetAsyncInput,
   type DepositAsyncInput,
   type InitChainAsyncInput,
   type InitConfigAsyncInput,
   type InitCreditsAsyncInput,
   type InitGameConfigInput,
+  type ParsedCancelBetInstruction,
   type ParsedDepositInstruction,
   type ParsedInitChainInstruction,
   type ParsedInitConfigInstruction,
   type ParsedInitCreditsInstruction,
   type ParsedInitGameConfigInstruction,
   type ParsedPlaceBetInstruction,
-  type ParsedRefundSpinInstruction,
-  type ParsedResolveSpinInstruction,
   type ParsedRevokeDelegateInstruction,
-  type ParsedSetChainModeInstruction,
+  type ParsedRotateChainInstruction,
+  type ParsedSetChainActiveInstruction,
   type ParsedSetDelegateInstruction,
+  type ParsedSetGameLimitsInstruction,
   type ParsedSetPausedInstruction,
-  type ParsedSpinChainInstruction,
+  type ParsedSettleBetInstruction,
   type ParsedTreasuryDepositInstruction,
   type ParsedTreasuryWithdrawInstruction,
   type ParsedWithdrawInstruction,
   type PlaceBetAsyncInput,
-  type RefundSpinAsyncInput,
-  type ResolveSpinAsyncInput,
   type RevokeDelegateAsyncInput,
-  type SetChainModeAsyncInput,
+  type RotateChainAsyncInput,
+  type SetChainActiveAsyncInput,
   type SetDelegateAsyncInput,
+  type SetGameLimitsInput,
   type SetPausedAsyncInput,
-  type SpinChainAsyncInput,
+  type SettleBetAsyncInput,
   type TreasuryDepositAsyncInput,
   type TreasuryWithdrawAsyncInput,
   type WithdrawAsyncInput,
 } from "../instructions";
 import {
+  findBetPda,
   findChainPda,
   findCreditsPda,
-  findPendingPda,
   findSessionPda,
   findTreasuryPda,
   findVaultPda,
-  findVrfStatePda,
 } from "../pdas";
 
 export const SPIN_PROGRAM_ADDRESS =
   "9sd7ASeBUmcCNm4eVFfQ7rSujtbVLmu8wMUh9PwdNWvP" as Address<"9sd7ASeBUmcCNm4eVFfQ7rSujtbVLmu8wMUh9PwdNWvP">;
 
 export enum SpinAccount {
+  BetState,
   ChainState,
   CreditLedger,
   GameConfig,
   HouseTreasury,
-  PendingSpin,
   PlayerSession,
   PlayerVault,
-  VrfState,
 }
 
 export function identifySpinAccount(
   account: { data: ReadonlyUint8Array } | ReadonlyUint8Array
 ): SpinAccount {
   const data = "data" in account ? account.data : account;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([143, 61, 238, 62, 232, 157, 101, 185])
+      ),
+      0
+    )
+  ) {
+    return SpinAccount.BetState;
+  }
   if (
     containsBytes(
       data,
@@ -201,17 +211,6 @@ export function identifySpinAccount(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([155, 97, 105, 5, 133, 90, 201, 6])
-      ),
-      0
-    )
-  ) {
-    return SpinAccount.PendingSpin;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([89, 95, 51, 45, 127, 42, 173, 223])
       ),
       0
@@ -230,17 +229,6 @@ export function identifySpinAccount(
   ) {
     return SpinAccount.PlayerVault;
   }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([45, 156, 194, 75, 180, 29, 158, 63])
-      ),
-      0
-    )
-  ) {
-    return SpinAccount.VrfState;
-  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT,
     { accountData: data, programName: "spin" }
@@ -248,19 +236,20 @@ export function identifySpinAccount(
 }
 
 export enum SpinInstruction {
+  CancelBet,
   Deposit,
   InitChain,
   InitConfig,
   InitCredits,
   InitGameConfig,
   PlaceBet,
-  RefundSpin,
-  ResolveSpin,
   RevokeDelegate,
-  SetChainMode,
+  RotateChain,
+  SetChainActive,
   SetDelegate,
+  SetGameLimits,
   SetPaused,
-  SpinChain,
+  SettleBet,
   TreasuryDeposit,
   TreasuryWithdraw,
   Withdraw,
@@ -270,6 +259,17 @@ export function identifySpinInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array
 ): SpinInstruction {
   const data = "data" in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([17, 248, 130, 128, 153, 227, 231, 9])
+      ),
+      0
+    )
+  ) {
+    return SpinInstruction.CancelBet;
+  }
   if (
     containsBytes(
       data,
@@ -340,28 +340,6 @@ export function identifySpinInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([229, 45, 88, 106, 146, 243, 116, 166])
-      ),
-      0
-    )
-  ) {
-    return SpinInstruction.RefundSpin;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([84, 128, 245, 44, 83, 211, 123, 126])
-      ),
-      0
-    )
-  ) {
-    return SpinInstruction.ResolveSpin;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([142, 66, 98, 126, 102, 60, 92, 163])
       ),
       0
@@ -373,12 +351,23 @@ export function identifySpinInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([131, 187, 48, 188, 45, 26, 88, 203])
+        new Uint8Array([7, 236, 121, 24, 100, 139, 124, 198])
       ),
       0
     )
   ) {
-    return SpinInstruction.SetChainMode;
+    return SpinInstruction.RotateChain;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([48, 161, 76, 121, 238, 151, 17, 210])
+      ),
+      0
+    )
+  ) {
+    return SpinInstruction.SetChainActive;
   }
   if (
     containsBytes(
@@ -395,6 +384,17 @@ export function identifySpinInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([11, 218, 205, 84, 77, 170, 112, 99])
+      ),
+      0
+    )
+  ) {
+    return SpinInstruction.SetGameLimits;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([91, 60, 125, 192, 176, 225, 166, 218])
       ),
       0
@@ -406,12 +406,12 @@ export function identifySpinInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([104, 79, 99, 255, 165, 160, 242, 112])
+        new Uint8Array([115, 55, 234, 177, 227, 4, 10, 67])
       ),
       0
     )
   ) {
-    return SpinInstruction.SpinChain;
+    return SpinInstruction.SettleBet;
   }
   if (
     containsBytes(
@@ -456,6 +456,9 @@ export type ParsedSpinInstruction<
   TProgram extends string = "9sd7ASeBUmcCNm4eVFfQ7rSujtbVLmu8wMUh9PwdNWvP",
 > =
   | ({
+      instructionType: SpinInstruction.CancelBet;
+    } & ParsedCancelBetInstruction<TProgram>)
+  | ({
       instructionType: SpinInstruction.Deposit;
     } & ParsedDepositInstruction<TProgram>)
   | ({
@@ -474,26 +477,26 @@ export type ParsedSpinInstruction<
       instructionType: SpinInstruction.PlaceBet;
     } & ParsedPlaceBetInstruction<TProgram>)
   | ({
-      instructionType: SpinInstruction.RefundSpin;
-    } & ParsedRefundSpinInstruction<TProgram>)
-  | ({
-      instructionType: SpinInstruction.ResolveSpin;
-    } & ParsedResolveSpinInstruction<TProgram>)
-  | ({
       instructionType: SpinInstruction.RevokeDelegate;
     } & ParsedRevokeDelegateInstruction<TProgram>)
   | ({
-      instructionType: SpinInstruction.SetChainMode;
-    } & ParsedSetChainModeInstruction<TProgram>)
+      instructionType: SpinInstruction.RotateChain;
+    } & ParsedRotateChainInstruction<TProgram>)
+  | ({
+      instructionType: SpinInstruction.SetChainActive;
+    } & ParsedSetChainActiveInstruction<TProgram>)
   | ({
       instructionType: SpinInstruction.SetDelegate;
     } & ParsedSetDelegateInstruction<TProgram>)
   | ({
+      instructionType: SpinInstruction.SetGameLimits;
+    } & ParsedSetGameLimitsInstruction<TProgram>)
+  | ({
       instructionType: SpinInstruction.SetPaused;
     } & ParsedSetPausedInstruction<TProgram>)
   | ({
-      instructionType: SpinInstruction.SpinChain;
-    } & ParsedSpinChainInstruction<TProgram>)
+      instructionType: SpinInstruction.SettleBet;
+    } & ParsedSettleBetInstruction<TProgram>)
   | ({
       instructionType: SpinInstruction.TreasuryDeposit;
     } & ParsedTreasuryDepositInstruction<TProgram>)
@@ -509,6 +512,13 @@ export function parseSpinInstruction<TProgram extends string>(
 ): ParsedSpinInstruction<TProgram> {
   const instructionType = identifySpinInstruction(instruction);
   switch (instructionType) {
+    case SpinInstruction.CancelBet: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SpinInstruction.CancelBet,
+        ...parseCancelBetInstruction(instruction),
+      };
+    }
     case SpinInstruction.Deposit: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -551,20 +561,6 @@ export function parseSpinInstruction<TProgram extends string>(
         ...parsePlaceBetInstruction(instruction),
       };
     }
-    case SpinInstruction.RefundSpin: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SpinInstruction.RefundSpin,
-        ...parseRefundSpinInstruction(instruction),
-      };
-    }
-    case SpinInstruction.ResolveSpin: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: SpinInstruction.ResolveSpin,
-        ...parseResolveSpinInstruction(instruction),
-      };
-    }
     case SpinInstruction.RevokeDelegate: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -572,11 +568,18 @@ export function parseSpinInstruction<TProgram extends string>(
         ...parseRevokeDelegateInstruction(instruction),
       };
     }
-    case SpinInstruction.SetChainMode: {
+    case SpinInstruction.RotateChain: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: SpinInstruction.SetChainMode,
-        ...parseSetChainModeInstruction(instruction),
+        instructionType: SpinInstruction.RotateChain,
+        ...parseRotateChainInstruction(instruction),
+      };
+    }
+    case SpinInstruction.SetChainActive: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SpinInstruction.SetChainActive,
+        ...parseSetChainActiveInstruction(instruction),
       };
     }
     case SpinInstruction.SetDelegate: {
@@ -586,6 +589,13 @@ export function parseSpinInstruction<TProgram extends string>(
         ...parseSetDelegateInstruction(instruction),
       };
     }
+    case SpinInstruction.SetGameLimits: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: SpinInstruction.SetGameLimits,
+        ...parseSetGameLimitsInstruction(instruction),
+      };
+    }
     case SpinInstruction.SetPaused: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -593,11 +603,11 @@ export function parseSpinInstruction<TProgram extends string>(
         ...parseSetPausedInstruction(instruction),
       };
     }
-    case SpinInstruction.SpinChain: {
+    case SpinInstruction.SettleBet: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: SpinInstruction.SpinChain,
-        ...parseSpinChainInstruction(instruction),
+        instructionType: SpinInstruction.SettleBet,
+        ...parseSettleBetInstruction(instruction),
       };
     }
     case SpinInstruction.TreasuryDeposit: {
@@ -639,6 +649,8 @@ export type SpinPlugin = {
 };
 
 export type SpinPluginAccounts = {
+  betState: ReturnType<typeof getBetStateCodec> &
+    SelfFetchFunctions<BetStateArgs, BetState>;
   chainState: ReturnType<typeof getChainStateCodec> &
     SelfFetchFunctions<ChainStateArgs, ChainState>;
   creditLedger: ReturnType<typeof getCreditLedgerCodec> &
@@ -647,17 +659,17 @@ export type SpinPluginAccounts = {
     SelfFetchFunctions<GameConfigArgs, GameConfig>;
   houseTreasury: ReturnType<typeof getHouseTreasuryCodec> &
     SelfFetchFunctions<HouseTreasuryArgs, HouseTreasury>;
-  pendingSpin: ReturnType<typeof getPendingSpinCodec> &
-    SelfFetchFunctions<PendingSpinArgs, PendingSpin>;
   playerSession: ReturnType<typeof getPlayerSessionCodec> &
     SelfFetchFunctions<PlayerSessionArgs, PlayerSession>;
   playerVault: ReturnType<typeof getPlayerVaultCodec> &
     SelfFetchFunctions<PlayerVaultArgs, PlayerVault>;
-  vrfState: ReturnType<typeof getVrfStateCodec> &
-    SelfFetchFunctions<VrfStateArgs, VrfState>;
 };
 
 export type SpinPluginInstructions = {
+  cancelBet: (
+    input: CancelBetAsyncInput
+  ) => ReturnType<typeof getCancelBetInstructionAsync> &
+    SelfPlanAndSendFunctions;
   deposit: (
     input: DepositAsyncInput
   ) => ReturnType<typeof getDepositInstructionAsync> & SelfPlanAndSendFunctions;
@@ -681,33 +693,33 @@ export type SpinPluginInstructions = {
     input: PlaceBetAsyncInput
   ) => ReturnType<typeof getPlaceBetInstructionAsync> &
     SelfPlanAndSendFunctions;
-  refundSpin: (
-    input: RefundSpinAsyncInput
-  ) => ReturnType<typeof getRefundSpinInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  resolveSpin: (
-    input: ResolveSpinAsyncInput
-  ) => ReturnType<typeof getResolveSpinInstructionAsync> &
-    SelfPlanAndSendFunctions;
   revokeDelegate: (
     input: RevokeDelegateAsyncInput
   ) => ReturnType<typeof getRevokeDelegateInstructionAsync> &
     SelfPlanAndSendFunctions;
-  setChainMode: (
-    input: SetChainModeAsyncInput
-  ) => ReturnType<typeof getSetChainModeInstructionAsync> &
+  rotateChain: (
+    input: RotateChainAsyncInput
+  ) => ReturnType<typeof getRotateChainInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  setChainActive: (
+    input: SetChainActiveAsyncInput
+  ) => ReturnType<typeof getSetChainActiveInstructionAsync> &
     SelfPlanAndSendFunctions;
   setDelegate: (
     input: SetDelegateAsyncInput
   ) => ReturnType<typeof getSetDelegateInstructionAsync> &
     SelfPlanAndSendFunctions;
+  setGameLimits: (
+    input: SetGameLimitsInput
+  ) => ReturnType<typeof getSetGameLimitsInstruction> &
+    SelfPlanAndSendFunctions;
   setPaused: (
     input: SetPausedAsyncInput
   ) => ReturnType<typeof getSetPausedInstructionAsync> &
     SelfPlanAndSendFunctions;
-  spinChain: (
-    input: SpinChainAsyncInput
-  ) => ReturnType<typeof getSpinChainInstructionAsync> &
+  settleBet: (
+    input: SettleBetAsyncInput
+  ) => ReturnType<typeof getSettleBetInstructionAsync> &
     SelfPlanAndSendFunctions;
   treasuryDeposit: (
     input: TreasuryDepositAsyncInput
@@ -724,13 +736,12 @@ export type SpinPluginInstructions = {
 };
 
 export type SpinPluginPdas = {
-  treasury: typeof findTreasuryPda;
+  bet: typeof findBetPda;
+  chain: typeof findChainPda;
   vault: typeof findVaultPda;
   credits: typeof findCreditsPda;
-  chain: typeof findChainPda;
-  vrfState: typeof findVrfStatePda;
+  treasury: typeof findTreasuryPda;
   session: typeof findSessionPda;
-  pending: typeof findPendingPda;
 };
 
 export type SpinPluginRequirements = ClientWithRpc<
@@ -746,16 +757,20 @@ export function spinProgram() {
     return extendClient(client, {
       spin: <SpinPlugin>{
         accounts: {
+          betState: addSelfFetchFunctions(client, getBetStateCodec()),
           chainState: addSelfFetchFunctions(client, getChainStateCodec()),
           creditLedger: addSelfFetchFunctions(client, getCreditLedgerCodec()),
           gameConfig: addSelfFetchFunctions(client, getGameConfigCodec()),
           houseTreasury: addSelfFetchFunctions(client, getHouseTreasuryCodec()),
-          pendingSpin: addSelfFetchFunctions(client, getPendingSpinCodec()),
           playerSession: addSelfFetchFunctions(client, getPlayerSessionCodec()),
           playerVault: addSelfFetchFunctions(client, getPlayerVaultCodec()),
-          vrfState: addSelfFetchFunctions(client, getVrfStateCodec()),
         },
         instructions: {
+          cancelBet: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCancelBetInstructionAsync(input)
+            ),
           deposit: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -786,40 +801,40 @@ export function spinProgram() {
               client,
               getPlaceBetInstructionAsync(input)
             ),
-          refundSpin: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getRefundSpinInstructionAsync(input)
-            ),
-          resolveSpin: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getResolveSpinInstructionAsync(input)
-            ),
           revokeDelegate: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getRevokeDelegateInstructionAsync(input)
             ),
-          setChainMode: (input) =>
+          rotateChain: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getSetChainModeInstructionAsync(input)
+              getRotateChainInstructionAsync(input)
+            ),
+          setChainActive: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSetChainActiveInstructionAsync(input)
             ),
           setDelegate: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getSetDelegateInstructionAsync(input)
             ),
+          setGameLimits: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSetGameLimitsInstruction(input)
+            ),
           setPaused: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getSetPausedInstructionAsync(input)
             ),
-          spinChain: (input) =>
+          settleBet: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getSpinChainInstructionAsync(input)
+              getSettleBetInstructionAsync(input)
             ),
           treasuryDeposit: (input) =>
             addSelfPlanAndSendFunctions(
@@ -838,13 +853,12 @@ export function spinProgram() {
             ),
         },
         pdas: {
-          treasury: findTreasuryPda,
+          bet: findBetPda,
+          chain: findChainPda,
           vault: findVaultPda,
           credits: findCreditsPda,
-          chain: findChainPda,
-          vrfState: findVrfStatePda,
+          treasury: findTreasuryPda,
           session: findSessionPda,
-          pending: findPendingPda,
         },
         identifyAccount: identifySpinAccount,
         identifyInstruction: identifySpinInstruction,

@@ -50,10 +50,15 @@ export function getCreditLedgerDiscriminatorBytes(): ReadonlyUint8Array {
 export type CreditLedger = {
   discriminator: ReadonlyUint8Array;
   total: bigint;
+  reserved: bigint;
   bump: number;
 };
 
-export type CreditLedgerArgs = { total: number | bigint; bump: number };
+export type CreditLedgerArgs = {
+  total: number | bigint;
+  reserved: number | bigint;
+  bump: number;
+};
 
 /** Gets the encoder for {@link CreditLedgerArgs} account data. */
 export function getCreditLedgerEncoder(): FixedSizeEncoder<CreditLedgerArgs> {
@@ -61,6 +66,7 @@ export function getCreditLedgerEncoder(): FixedSizeEncoder<CreditLedgerArgs> {
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["total", getU64Encoder()],
+      ["reserved", getU64Encoder()],
       ["bump", getU8Encoder()],
     ]),
     (value) => ({ ...value, discriminator: CREDIT_LEDGER_DISCRIMINATOR })
@@ -72,6 +78,7 @@ export function getCreditLedgerDecoder(): FixedSizeDecoder<CreditLedger> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["total", getU64Decoder()],
+    ["reserved", getU64Decoder()],
     ["bump", getU8Decoder()],
   ]);
 }
@@ -138,5 +145,5 @@ export async function fetchAllMaybeCreditLedger(
 }
 
 export function getCreditLedgerSize(): number {
-  return 17;
+  return 25;
 }

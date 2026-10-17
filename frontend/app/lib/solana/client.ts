@@ -23,13 +23,15 @@ import { walletSigner } from "@solana/kit-plugin-wallet";
 import { solanaRpc, rpcAirdrop } from "@solana/kit-plugin-rpc";
 import { systemProgram } from "@solana-program/system";
 import {
+  getCancelBetInstructionAsync,
   getDepositInstructionAsync,
+  getPlaceBetInstructionAsync,
   getRevokeDelegateInstructionAsync,
   getSetDelegateInstructionAsync,
-  getSpinChainInstructionAsync,
+  getSettleBetInstructionAsync,
   getWithdrawInstructionAsync,
   SPIN_PROGRAM_ADDRESS,
-  type SpinChainAsyncInput,
+  type PlaceBetAsyncInput,
 } from "./generated/spin";
 import {
   CLUSTER_URLS,
@@ -52,15 +54,13 @@ export function getWalletChain(cluster: ClusterMoniker) {
 export async function findGameConfigPda(gameId: number): Promise<Address> {
   const [pda] = await getProgramDerivedAddress({
     programAddress: SPIN_PROGRAM_ADDRESS,
-    seeds: [
-      getUtf8Encoder().encode("game_config"),
-      getU8Encoder().encode(gameId),
-    ],
+    // Seed must match GAME_CONFIG_SEED in programs/spin/src/constants.rs.
+    seeds: [getUtf8Encoder().encode("game"), getU8Encoder().encode(gameId)],
   });
   return pda;
 }
 
-export type SpinChainInput = {
+export type PlaceBetInput = {
   /** Whose vault the stake comes out of. */
   player: Address;
   /** Signs and pays: the player's wallet, or their session key. */
@@ -68,7 +68,18 @@ export type SpinChainInput = {
   gameId: number;
   amount: bigint;
   target: bigint;
+  /** 32 random bytes from the browser, mixed into the randomness. */
+  clientSeed: Uint8Array;
+};
+export type SettleBetInput = {
+  cranker: TransactionSigner;
+  player: Address;
   reveal: Uint8Array;
+};
+export type CancelBetInput = {
+  /** Anyone may cancel a timed-out bet; pays the fee. */
+  caller: TransactionSigner;
+  player: Address;
 };
 
 export type DepositInput = { player: TransactionSigner; amount: bigint };
@@ -90,10 +101,18 @@ export type SpinPluginRequirements = ClientWithRpc<
 
 export type SpinPlugin = {
   instructions: {
-    spinChain: (
-      input: SpinChainInput
+    placeBet: (
+      input: PlaceBetInput
     ) => SelfPlanAndSendFunctions &
-      Promise<Awaited<ReturnType<typeof getSpinChainInstructionAsync>>>;
+      Promise<Awaited<ReturnType<typeof getPlaceBetInstructionAsync>>>;
+    settleBet: (
+      input: SettleBetInput
+    ) => SelfPlanAndSendFunctions &
+      Promise<Awaited<ReturnType<typeof getSettleBetInstructionAsync>>>;
+    cancelBet: (
+      input: CancelBetInput
+    ) => SelfPlanAndSendFunctions &
+      Promise<Awaited<ReturnType<typeof getCancelBetInstructionAsync>>>;
     deposit: (
       input: DepositInput
     ) => SelfPlanAndSendFunctions &
@@ -113,21 +132,21 @@ export type SpinPlugin = {
   };
 };
 
-async function buildSpinChainInstruction(input: SpinChainInput) {
+async function buildPlaceBetInstruction(input: PlaceBetInput) {
   // `player` is a plain address and `authority` is the signer, so the codama
-  // PDA resolvers (chain, vault, credits, session, treasury) key off the
+  // PDA resolvers (chain, vault, credits, session, bet, treasury) key off the
   // player while the session key pays and signs.
   const config = await findGameConfigPda(input.gameId);
-  const asyncInput: SpinChainAsyncInput = {
+  const asyncInput: PlaceBetAsyncInput = {
     authority: input.authority,
     player: input.player,
     config,
     gameId: input.gameId,
     amount: input.amount,
     target: input.target,
-    reveal: input.reveal,
+    clientSeed: input.clientSeed,
   };
-  return getSpinChainInstructionAsync(asyncInput);
+  return getPlaceBetInstructionAsync(asyncInput);
 }
 
 export function spinProgram(): <T extends SpinPluginRequirements>(
@@ -137,10 +156,27 @@ export function spinProgram(): <T extends SpinPluginRequirements>(
     const plugin: { spin: SpinPlugin } = {
       spin: {
         instructions: {
-          spinChain: (input) =>
+          placeBet: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              buildSpinChainInstruction(input)
+              buildPlaceBetInstruction(input)
+            ),
+          settleBet: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSettleBetInstructionAsync({
+                cranker: input.cranker,
+                player: input.player,
+                reveal: input.reveal,
+              })
+            ),
+          cancelBet: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCancelBetInstructionAsync({
+                caller: input.caller,
+                player: input.player,
+              })
             ),
           deposit: (input) =>
             addSelfPlanAndSendFunctions(

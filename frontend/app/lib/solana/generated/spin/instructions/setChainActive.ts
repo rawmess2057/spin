@@ -29,10 +29,10 @@ import {
   type InstructionWithAccounts,
   type InstructionWithData,
   type ReadonlyAccount,
+  type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type TransactionSigner,
   type WritableAccount,
-  type WritableSignerAccount,
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
@@ -41,17 +41,16 @@ import {
 import { findChainPda } from "../pdas";
 import { SPIN_PROGRAM_ADDRESS } from "../programs";
 
-export const SET_CHAIN_MODE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  131, 187, 48, 188, 45, 26, 88, 203,
-]);
+export const SET_CHAIN_ACTIVE_DISCRIMINATOR: ReadonlyUint8Array =
+  new Uint8Array([48, 161, 76, 121, 238, 151, 17, 210]);
 
-export function getSetChainModeDiscriminatorBytes(): ReadonlyUint8Array {
+export function getSetChainActiveDiscriminatorBytes(): ReadonlyUint8Array {
   return fixEncoderSize(getBytesEncoder(), 8).encode(
-    SET_CHAIN_MODE_DISCRIMINATOR
+    SET_CHAIN_ACTIVE_DISCRIMINATOR
   );
 }
 
-export type SetChainModeInstruction<
+export type SetChainActiveInstruction<
   TProgram extends string = typeof SPIN_PROGRAM_ADDRESS,
   TAccountAuthority extends string | AccountMeta<string> = string,
   TAccountTreasury extends string | AccountMeta<string> = string,
@@ -62,7 +61,7 @@ export type SetChainModeInstruction<
   InstructionWithAccounts<
     [
       TAccountAuthority extends string
-        ? WritableSignerAccount<TAccountAuthority> &
+        ? ReadonlySignerAccount<TAccountAuthority> &
             AccountSignerMeta<TAccountAuthority>
         : TAccountAuthority,
       TAccountTreasury extends string
@@ -75,47 +74,41 @@ export type SetChainModeInstruction<
     ]
   >;
 
-export type SetChainModeInstructionData = {
+export type SetChainActiveInstructionData = {
   discriminator: ReadonlyUint8Array;
   active: boolean;
-  vrfEnabled: boolean;
 };
 
-export type SetChainModeInstructionDataArgs = {
-  active: boolean;
-  vrfEnabled: boolean;
-};
+export type SetChainActiveInstructionDataArgs = { active: boolean };
 
-export function getSetChainModeInstructionDataEncoder(): FixedSizeEncoder<SetChainModeInstructionDataArgs> {
+export function getSetChainActiveInstructionDataEncoder(): FixedSizeEncoder<SetChainActiveInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["active", getBooleanEncoder()],
-      ["vrfEnabled", getBooleanEncoder()],
     ]),
-    (value) => ({ ...value, discriminator: SET_CHAIN_MODE_DISCRIMINATOR })
+    (value) => ({ ...value, discriminator: SET_CHAIN_ACTIVE_DISCRIMINATOR })
   );
 }
 
-export function getSetChainModeInstructionDataDecoder(): FixedSizeDecoder<SetChainModeInstructionData> {
+export function getSetChainActiveInstructionDataDecoder(): FixedSizeDecoder<SetChainActiveInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["active", getBooleanDecoder()],
-    ["vrfEnabled", getBooleanDecoder()],
   ]);
 }
 
-export function getSetChainModeInstructionDataCodec(): FixedSizeCodec<
-  SetChainModeInstructionDataArgs,
-  SetChainModeInstructionData
+export function getSetChainActiveInstructionDataCodec(): FixedSizeCodec<
+  SetChainActiveInstructionDataArgs,
+  SetChainActiveInstructionData
 > {
   return combineCodec(
-    getSetChainModeInstructionDataEncoder(),
-    getSetChainModeInstructionDataDecoder()
+    getSetChainActiveInstructionDataEncoder(),
+    getSetChainActiveInstructionDataDecoder()
   );
 }
 
-export type SetChainModeAsyncInput<
+export type SetChainActiveAsyncInput<
   TAccountAuthority extends string = string,
   TAccountTreasury extends string = string,
   TAccountChain extends string = string,
@@ -123,24 +116,23 @@ export type SetChainModeAsyncInput<
   authority: TransactionSigner<TAccountAuthority>;
   treasury: Address<TAccountTreasury>;
   chain?: Address<TAccountChain>;
-  active: SetChainModeInstructionDataArgs["active"];
-  vrfEnabled: SetChainModeInstructionDataArgs["vrfEnabled"];
+  active: SetChainActiveInstructionDataArgs["active"];
 };
 
-export async function getSetChainModeInstructionAsync<
+export async function getSetChainActiveInstructionAsync<
   TAccountAuthority extends string,
   TAccountTreasury extends string,
   TAccountChain extends string,
   TProgramAddress extends Address = typeof SPIN_PROGRAM_ADDRESS,
 >(
-  input: SetChainModeAsyncInput<
+  input: SetChainActiveAsyncInput<
     TAccountAuthority,
     TAccountTreasury,
     TAccountChain
   >,
   config?: { programAddress?: TProgramAddress }
 ): Promise<
-  SetChainModeInstruction<
+  SetChainActiveInstruction<
     TProgramAddress,
     TAccountAuthority,
     TAccountTreasury,
@@ -152,7 +144,7 @@ export async function getSetChainModeInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    authority: { value: input.authority ?? null, isWritable: true },
+    authority: { value: input.authority ?? null, isWritable: false },
     treasury: { value: input.treasury ?? null, isWritable: false },
     chain: { value: input.chain ?? null, isWritable: true },
   };
@@ -176,11 +168,11 @@ export async function getSetChainModeInstructionAsync<
       getAccountMeta("treasury", accounts.treasury),
       getAccountMeta("chain", accounts.chain),
     ],
-    data: getSetChainModeInstructionDataEncoder().encode(
-      args as SetChainModeInstructionDataArgs
+    data: getSetChainActiveInstructionDataEncoder().encode(
+      args as SetChainActiveInstructionDataArgs
     ),
     programAddress,
-  } as SetChainModeInstruction<
+  } as SetChainActiveInstruction<
     TProgramAddress,
     TAccountAuthority,
     TAccountTreasury,
@@ -188,7 +180,7 @@ export async function getSetChainModeInstructionAsync<
   >);
 }
 
-export type SetChainModeInput<
+export type SetChainActiveInput<
   TAccountAuthority extends string = string,
   TAccountTreasury extends string = string,
   TAccountChain extends string = string,
@@ -196,19 +188,22 @@ export type SetChainModeInput<
   authority: TransactionSigner<TAccountAuthority>;
   treasury: Address<TAccountTreasury>;
   chain: Address<TAccountChain>;
-  active: SetChainModeInstructionDataArgs["active"];
-  vrfEnabled: SetChainModeInstructionDataArgs["vrfEnabled"];
+  active: SetChainActiveInstructionDataArgs["active"];
 };
 
-export function getSetChainModeInstruction<
+export function getSetChainActiveInstruction<
   TAccountAuthority extends string,
   TAccountTreasury extends string,
   TAccountChain extends string,
   TProgramAddress extends Address = typeof SPIN_PROGRAM_ADDRESS,
 >(
-  input: SetChainModeInput<TAccountAuthority, TAccountTreasury, TAccountChain>,
+  input: SetChainActiveInput<
+    TAccountAuthority,
+    TAccountTreasury,
+    TAccountChain
+  >,
   config?: { programAddress?: TProgramAddress }
-): SetChainModeInstruction<
+): SetChainActiveInstruction<
   TProgramAddress,
   TAccountAuthority,
   TAccountTreasury,
@@ -219,7 +214,7 @@ export function getSetChainModeInstruction<
 
   // Original accounts.
   const originalAccounts = {
-    authority: { value: input.authority ?? null, isWritable: true },
+    authority: { value: input.authority ?? null, isWritable: false },
     treasury: { value: input.treasury ?? null, isWritable: false },
     chain: { value: input.chain ?? null, isWritable: true },
   };
@@ -238,11 +233,11 @@ export function getSetChainModeInstruction<
       getAccountMeta("treasury", accounts.treasury),
       getAccountMeta("chain", accounts.chain),
     ],
-    data: getSetChainModeInstructionDataEncoder().encode(
-      args as SetChainModeInstructionDataArgs
+    data: getSetChainActiveInstructionDataEncoder().encode(
+      args as SetChainActiveInstructionDataArgs
     ),
     programAddress,
-  } as SetChainModeInstruction<
+  } as SetChainActiveInstruction<
     TProgramAddress,
     TAccountAuthority,
     TAccountTreasury,
@@ -250,7 +245,7 @@ export function getSetChainModeInstruction<
   >);
 }
 
-export type ParsedSetChainModeInstruction<
+export type ParsedSetChainActiveInstruction<
   TProgram extends string = typeof SPIN_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
@@ -260,17 +255,17 @@ export type ParsedSetChainModeInstruction<
     treasury: TAccountMetas[1];
     chain: TAccountMetas[2];
   };
-  data: SetChainModeInstructionData;
+  data: SetChainActiveInstructionData;
 };
 
-export function parseSetChainModeInstruction<
+export function parseSetChainActiveInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>
-): ParsedSetChainModeInstruction<TProgram, TAccountMetas> {
+): ParsedSetChainActiveInstruction<TProgram, TAccountMetas> {
   if (instruction.accounts.length < 3) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -293,6 +288,6 @@ export function parseSetChainModeInstruction<
       treasury: getNextAccount(),
       chain: getNextAccount(),
     },
-    data: getSetChainModeInstructionDataDecoder().decode(instruction.data),
+    data: getSetChainActiveInstructionDataDecoder().decode(instruction.data),
   };
 }

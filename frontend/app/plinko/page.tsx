@@ -16,7 +16,9 @@ import {
   PLINKO_RISK_NAMES,
   type PlinkoConfig,
   type PlinkoOutcome,
+  plinkoDecodeTarget,
   plinkoEval,
+  plinkoMaxMultiplierBp,
 } from "../lib/solana/games/plinko";
 import {
   diamondString,
@@ -29,6 +31,7 @@ import {
   type WinRecord,
 } from "../components/plinko/plinko-history";
 import { ConfettiCanvas } from "../components/animations/confetti-canvas";
+import { FairPanel } from "../components/fairness/fair-panel";
 
 const PlinkoBoard = dynamic(
   () => import("../components/plinko/plinko-board").then((m) => m.PlinkoBoard),
@@ -46,15 +49,15 @@ export default function PlinkoPage() {
     rows: 12,
     risk: PLINKO_RISK.LOW,
   });
-  // `evaluate` is captured by useVaultSpin's internal `placeBet` (which doesn't
-  // re-run on config changes), so the evaluator reads config through a ref to
-  // always see the latest selection.
+  // The on-chain bet records its target, so the evaluator decodes rows/risk
+  // from it; the demo path has no such record and uses the current selection.
   const configRef = useRef(config);
   useEffect(() => {
     configRef.current = config;
   }, [config]);
 
   const [wins, setWins] = useState<WinRecord[]>([]);
+  const [fairOpen, setFairOpen] = useState(false);
   const [landed, setLanded] = useState<Landed | null>(null);
   const [celebration, setCelebration] = useState<{
     mode: "confetti" | "coins";
@@ -106,26 +109,31 @@ export default function PlinkoPage() {
 
   // The spinner held outcome is resolved after the minimum spin duration; we
   // immediately hand it to the board to animate the deterministic path.
-  const evaluate = useCallback((randomness: Uint8Array, bet: bigint) => {
-    const outcome = plinkoEval(randomness, bet, configRef.current);
-    // Trigger the board animation before the hook releases the outcome to
-    // the controls, so the reveal and the drop start together. Hide any
-    // previous result chip as the next ball begins its run.
-    if (landTimer.current != null) clearTimeout(landTimer.current);
-    setLanded(null);
-    queueMicrotask(() =>
-      boardRef.current?.dropBall(outcome, (o) =>
-        handleLandedRef.current(o, bet)
-      )
-    );
-    return outcome;
-  }, []);
+  const evaluate = useCallback(
+    (randomness: Uint8Array, bet: bigint, target: bigint) => {
+      const cfg = plinkoDecodeTarget(target) ?? configRef.current;
+      const outcome = plinkoEval(randomness, bet, cfg);
+      // Trigger the board animation before the hook releases the outcome to
+      // the controls, so the reveal and the drop start together. Hide any
+      // previous result chip as the next ball begins its run.
+      if (landTimer.current != null) clearTimeout(landTimer.current);
+      setLanded(null);
+      queueMicrotask(() =>
+        boardRef.current?.dropBall(outcome, (o) =>
+          handleLandedRef.current(o, bet)
+        )
+      );
+      return outcome;
+    },
+    []
+  );
 
   // On-chain when a wallet is connected, practice diamonds otherwise. Both
   // hooks always run (hook order), and the page reads from whichever applies.
   const vaultSpin = useVaultSpin<PlinkoOutcome>({
     gameId: GAME_PLINKO,
     evaluate,
+    maxMultiplierBp: plinkoMaxMultiplierBp,
     minSpinMs: 2200,
   });
   const demoSpin = useDemoSpin<PlinkoOutcome>({
@@ -181,10 +189,14 @@ export default function PlinkoPage() {
                 {config.rows} rows · {riskName} risk
               </span>
             </div>
-            <span className="flex items-center gap-1.5 rounded-full border border-border-low bg-cream/40 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-muted">
+            <button
+              type="button"
+              onClick={() => setFairOpen(true)}
+              className="flex cursor-pointer items-center gap-1.5 rounded-full border border-border-low bg-cream/40 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-muted transition hover:bg-cream hover:text-foreground"
+            >
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_6px_#00ffa3]" />
               Provably fair
-            </span>
+            </button>
           </header>
 
           <div className="relative w-full">
@@ -237,6 +249,18 @@ export default function PlinkoPage() {
           />
         </aside>
       </div>
+
+      <FairPanel
+        open={fairOpen}
+        onClose={() => setFairOpen(false)}
+        chain={vaultSpin.chain.data}
+        bet={vaultSpin.lastBet}
+        demo={!vaultSpin.connected}
+        evaluatePayout={(r, bet, target) =>
+          plinkoEval(r, bet, plinkoDecodeTarget(target) ?? configRef.current)
+            .payout
+        }
+      />
 
       {celebration != null && (
         <ConfettiCanvas

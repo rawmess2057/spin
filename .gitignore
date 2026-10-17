@@ -7,3 +7,6 @@ target/
 .env
 .env.local
 scripts/chain/data/
+scripts/settle/data/
+*-keypair.json
+target-deploy-keypair.json

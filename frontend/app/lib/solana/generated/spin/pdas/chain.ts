@@ -21,6 +21,8 @@ export async function findChainPda(
   } = config;
   return await getProgramDerivedAddress({
     programAddress,
-    seeds: [getBytesEncoder().encode(new Uint8Array([99, 104, 97, 105, 110]))],
+    seeds: [
+      getBytesEncoder().encode(new Uint8Array([99, 104, 97, 105, 110, 50])),
+    ],
   });
 }

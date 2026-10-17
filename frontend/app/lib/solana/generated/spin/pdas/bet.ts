@@ -7,13 +7,19 @@
  */
 
 import {
+  getAddressEncoder,
   getBytesEncoder,
   getProgramDerivedAddress,
   type Address,
   type ProgramDerivedAddress,
 } from "@solana/kit";
 
-export async function findVrfStatePda(
+export type BetSeeds = {
+  player: Address;
+};
+
+export async function findBetPda(
+  seeds: BetSeeds,
   config: { programAddress?: Address | undefined } = {}
 ): Promise<ProgramDerivedAddress> {
   const {
@@ -22,9 +28,8 @@ export async function findVrfStatePda(
   return await getProgramDerivedAddress({
     programAddress,
     seeds: [
-      getBytesEncoder().encode(
-        new Uint8Array([118, 114, 102, 95, 115, 116, 97, 116, 101])
-      ),
+      getBytesEncoder().encode(new Uint8Array([98, 101, 116])),
+      getAddressEncoder().encode(seeds.player),
     ],
   });
 }

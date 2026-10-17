@@ -51,44 +51,56 @@ export function getChainStateDiscriminatorBytes(): ReadonlyUint8Array {
 
 export type ChainState = {
   discriminator: ReadonlyUint8Array;
-  /** House authority that initialized the chain. */
+  /** House authority that published this epoch. */
   house: Address;
-  /** Chain seed; reveal i = sha256(seed || i.to_le_bytes()). */
-  seed: ReadonlyUint8Array;
-  /** The next unconsumed reveal index (0..length). */
-  index: bigint;
-  /** Total number of reveals in this chain. */
-  length: bigint;
-  /** Whether the chain accepts spins. */
-  active: boolean;
   /**
-   * When true, the legacy VRF betting path is accepted instead of the
-   * chain. `init_chain` turns it off; `set_chain_mode` can restore it for
-   * rollback. `spin_chain` rejects when it is true, and clients refuse to
-   * call the VRF path when the chain exists and it is false.
+   * Incremented on every rotation; bets bind to the epoch they were
+   * placed in and can only settle within it.
    */
-  vrfEnabled: boolean;
+  epoch: bigint;
+  /** `s_0` of this epoch, kept for verifying historical bets. */
+  genesis: ReadonlyUint8Array;
+  /** Current tip: the hash the next reveal must have as its image. */
+  commitment: ReadonlyUint8Array;
+  /** Reveals consumed in this epoch (the index of `commitment`). */
+  index: bigint;
+  /** Reveals available in this epoch. */
+  length: bigint;
+  /** FIFO ticket handed to the next bet placed. */
+  nextSeq: bigint;
+  /** Ticket of the bet that must be settled or cancelled next. */
+  cursor: bigint;
+  /** Bets cancelled after a timeout — a public record of house stalls. */
+  stalls: bigint;
+  /** Whether the chain accepts new bets. */
+  active: boolean;
   bump: number;
 };
 
 export type ChainStateArgs = {
-  /** House authority that initialized the chain. */
+  /** House authority that published this epoch. */
   house: Address;
-  /** Chain seed; reveal i = sha256(seed || i.to_le_bytes()). */
-  seed: ReadonlyUint8Array;
-  /** The next unconsumed reveal index (0..length). */
-  index: number | bigint;
-  /** Total number of reveals in this chain. */
-  length: number | bigint;
-  /** Whether the chain accepts spins. */
-  active: boolean;
   /**
-   * When true, the legacy VRF betting path is accepted instead of the
-   * chain. `init_chain` turns it off; `set_chain_mode` can restore it for
-   * rollback. `spin_chain` rejects when it is true, and clients refuse to
-   * call the VRF path when the chain exists and it is false.
+   * Incremented on every rotation; bets bind to the epoch they were
+   * placed in and can only settle within it.
    */
-  vrfEnabled: boolean;
+  epoch: number | bigint;
+  /** `s_0` of this epoch, kept for verifying historical bets. */
+  genesis: ReadonlyUint8Array;
+  /** Current tip: the hash the next reveal must have as its image. */
+  commitment: ReadonlyUint8Array;
+  /** Reveals consumed in this epoch (the index of `commitment`). */
+  index: number | bigint;
+  /** Reveals available in this epoch. */
+  length: number | bigint;
+  /** FIFO ticket handed to the next bet placed. */
+  nextSeq: number | bigint;
+  /** Ticket of the bet that must be settled or cancelled next. */
+  cursor: number | bigint;
+  /** Bets cancelled after a timeout — a public record of house stalls. */
+  stalls: number | bigint;
+  /** Whether the chain accepts new bets. */
+  active: boolean;
   bump: number;
 };
 
@@ -98,11 +110,15 @@ export function getChainStateEncoder(): FixedSizeEncoder<ChainStateArgs> {
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["house", getAddressEncoder()],
-      ["seed", fixEncoderSize(getBytesEncoder(), 32)],
+      ["epoch", getU64Encoder()],
+      ["genesis", fixEncoderSize(getBytesEncoder(), 32)],
+      ["commitment", fixEncoderSize(getBytesEncoder(), 32)],
       ["index", getU64Encoder()],
       ["length", getU64Encoder()],
+      ["nextSeq", getU64Encoder()],
+      ["cursor", getU64Encoder()],
+      ["stalls", getU64Encoder()],
       ["active", getBooleanEncoder()],
-      ["vrfEnabled", getBooleanEncoder()],
       ["bump", getU8Encoder()],
     ]),
     (value) => ({ ...value, discriminator: CHAIN_STATE_DISCRIMINATOR })
@@ -114,11 +130,15 @@ export function getChainStateDecoder(): FixedSizeDecoder<ChainState> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["house", getAddressDecoder()],
-    ["seed", fixDecoderSize(getBytesDecoder(), 32)],
+    ["epoch", getU64Decoder()],
+    ["genesis", fixDecoderSize(getBytesDecoder(), 32)],
+    ["commitment", fixDecoderSize(getBytesDecoder(), 32)],
     ["index", getU64Decoder()],
     ["length", getU64Decoder()],
+    ["nextSeq", getU64Decoder()],
+    ["cursor", getU64Decoder()],
+    ["stalls", getU64Decoder()],
     ["active", getBooleanDecoder()],
-    ["vrfEnabled", getBooleanDecoder()],
     ["bump", getU8Decoder()],
   ]);
 }
@@ -185,5 +205,5 @@ export async function fetchAllMaybeChainState(
 }
 
 export function getChainStateSize(): number {
-  return 91;
+  return 154;
 }

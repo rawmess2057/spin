@@ -12,6 +12,7 @@ import {
 } from "../../lib/diamonds";
 import { haptic } from "../../lib/sound/events";
 import type { SpinSurface } from "../../lib/hooks/use-demo-spin";
+import { useBuyChips } from "../vault/buy-chips-context";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -37,6 +38,7 @@ function FieldLabel({ children }: { children: ReactNode }) {
 }
 
 export function PlinkoControls({ config, onConfigChange, spin }: Props) {
+  const buyChips = useBuyChips();
   const [input, setInput] = useState("");
   const seededDefault = useRef(false);
 
@@ -74,7 +76,7 @@ export function PlinkoControls({ config, onConfigChange, spin }: Props) {
     haptic("light");
   };
 
-  const errors = spin.betErrors(betLamports);
+  const errors = spin.betErrors(betLamports, plinkoEncodeTarget(config));
   const canDrop =
     betLamports != null &&
     errors.length === 0 &&
@@ -139,7 +141,9 @@ export function PlinkoControls({ config, onConfigChange, spin }: Props) {
         stopAuto("Auto-play stopped — session spend limit reached.");
         return;
       }
-      if (spin.betErrors(autoBetLamports).length > 0) {
+      if (
+        spin.betErrors(autoBetLamports, plinkoEncodeTarget(config)).length > 0
+      ) {
         stopAuto("Auto-play stopped — bet is invalid.");
         return;
       }
@@ -165,7 +169,9 @@ export function PlinkoControls({ config, onConfigChange, spin }: Props) {
 
   const busy = spin.rolling || spin.isSending;
   const betButtonLabel = busy
-    ? "Dropping ball…"
+    ? spin.isDemo
+      ? "Dropping ball…"
+      : "Waiting for the house…"
     : currentD != null
       ? `Bet ${diamondString(currentD)} 💎`
       : "Bet";
@@ -202,6 +208,15 @@ export function PlinkoControls({ config, onConfigChange, spin }: Props) {
             </span>
             <span className="text-[11px]">💎</span>
           </span>
+          {!spin.isDemo && (
+            <button
+              type="button"
+              onClick={() => buyChips.open("buy")}
+              className="cursor-pointer rounded-md border border-gold/50 bg-gold/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gold transition hover:bg-gold/20"
+            >
+              Buy chips
+            </button>
+          )}
         </div>
       </div>
 
@@ -302,7 +317,7 @@ export function PlinkoControls({ config, onConfigChange, spin }: Props) {
         {spin.isDemo
           ? "Demo mode — connect a wallet and buy chips to play for real."
           : busy
-            ? "Settling your drop on-chain — hang tight."
+            ? "Bet placed — the house is revealing your result on-chain."
             : "Every drop is settled on-chain from a provably fair reveal."}
       </p>
 

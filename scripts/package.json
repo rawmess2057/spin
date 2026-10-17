@@ -7,24 +7,25 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "typecheck": "tsc --noEmit",
     "deploy": "tsx deploy.ts",
     "init-house": "tsx init-house.ts",
-    "init-new-games": "tsx init-new-games.ts",
-    "serve": "tsx chain/serve.ts"
+    "generate-chain": "tsx settle/generate-chain.ts",
+    "init-chain": "tsx settle/init-chain.ts",
+    "rotate-chain": "tsx settle/rotate-chain.ts",
+    "settle": "tsx settle/server.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@coral-xyz/anchor": "^0.32.1",
-    "@orao-network/solana-vrf-cb": "^0.4.0",
     "@solana/kit": "^7.0.0",
     "@types/node": "^26.1.2",
     "tsx": "^4.23.10",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "@noble/hashes": "^1.8.0",
+    "bs58": "^6.0.0"
   },
   "devDependencies": {
     "@types/bs58": "^4.0.4"

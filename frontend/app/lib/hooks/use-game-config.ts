@@ -5,6 +5,6 @@ import { usePda } from "./use-pda";
 import { useAccountData } from "./use-account-data";
 
 export function useGameConfig(gameId: number) {
-  const address = usePda(SPIN_PROGRAM_ADDRESS, ["game_config", gameId]);
+  const address = usePda(SPIN_PROGRAM_ADDRESS, ["game", gameId]);
   return useAccountData(address, (data) => getGameConfigDecoder().decode(data));
 }

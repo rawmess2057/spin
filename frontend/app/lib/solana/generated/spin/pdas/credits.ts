@@ -22,9 +22,7 @@ export async function findCreditsPda(
   return await getProgramDerivedAddress({
     programAddress,
     seeds: [
-      getBytesEncoder().encode(
-        new Uint8Array([99, 114, 101, 100, 105, 116, 115])
-      ),
+      getBytesEncoder().encode(new Uint8Array([108, 101, 100, 103, 101, 114])),
     ],
   });
 }

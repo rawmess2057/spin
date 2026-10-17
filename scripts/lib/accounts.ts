@@ -1,21 +1,16 @@
+/** Borsh decoders for the spin program's accounts (v2 layouts). */
 import bs58 from "bs58";
+import { sha256 } from "@noble/hashes/sha256";
 import type { Address } from "@solana/kit";
 import type { RpcBundle } from "./util.js";
 
-export type PendingStatus = "AwaitingResolution" | "Resolved";
-
-export type HouseTreasuryData = {
-  authority: string;
-  paused: boolean;
-  bump: number;
-};
+export type HouseTreasuryData = { authority: string; paused: boolean; bump: number };
 
 export type GameConfigData = {
   gameId: number;
   minBet: bigint;
   maxBet: bigint;
-  houseEdgeBp: number;
-  params: Uint8Array;
+  paused: boolean;
   bump: number;
 };
 
@@ -24,18 +19,6 @@ export type PlayerSessionData = {
   wagered: bigint;
   won: bigint;
   bets: bigint;
-  bump: number;
-};
-
-export type PendingSpinData = {
-  player: string;
-  gameId: number;
-  amount: bigint;
-  target: bigint;
-  seed: Uint8Array;
-  status: PendingStatus;
-  createdSlot: bigint;
-  rentPayer: string;
   bump: number;
 };
 
@@ -48,51 +31,55 @@ export type PlayerVaultData = {
   bump: number;
 };
 
+export type CreditLedgerData = { total: bigint; reserved: bigint; bump: number };
+
 export type ChainStateData = {
   house: string;
-  seed: Uint8Array;
+  epoch: bigint;
+  genesis: Uint8Array;
+  commitment: Uint8Array;
   index: bigint;
   length: bigint;
+  nextSeq: bigint;
+  cursor: bigint;
+  stalls: bigint;
   active: boolean;
-  vrfEnabled: boolean;
   bump: number;
 };
 
-export type CreditLedgerData = {
-  total: bigint;
+export type BetStatus = "None" | "Open" | "Settled" | "Cancelled";
+export const BET_STATUS: readonly BetStatus[] = ["None", "Open", "Settled", "Cancelled"];
+
+export type BetStateData = {
+  player: string;
+  nonce: bigint;
+  seq: bigint;
+  chainEpoch: bigint;
+  gameId: number;
+  status: BetStatus;
+  amount: bigint;
+  target: bigint;
+  clientSeed: Uint8Array;
+  reserved: bigint;
+  placedSlot: bigint;
+  indexAtPlace: bigint;
+  commitment: Uint8Array;
+  reveal: Uint8Array;
+  revealIndex: bigint;
+  roll: bigint;
+  payout: bigint;
+  settledSlot: bigint;
   bump: number;
 };
 
-export type NetworkStateData = {
-  bump: number;
-  authority: string;
-  treasury: string;
-  requestFee: bigint;
-  callbackDeadline: bigint;
-  fulfillAuthorities: string[];
-  numRequests: bigint;
-  numRegistered: bigint;
-  numTerminated: bigint;
-};
+/** Anchor account discriminator: sha256("account:<Name>")[..8]. */
+export function accountDiscriminator(name: string): Uint8Array {
+  return sha256(`account:${name}`).slice(0, 8);
+}
 
-export type ClientData = {
-  bump: number;
-  owner: string;
-  program: string;
-  state: string;
-  numRequests: bigint;
-};
-
-export type RequestStateData = "Pending" | "Fulfilled" | string;
-
-export type RequestAccountData = {
-  bump: number;
-  slot: bigint;
-  client: string;
-  seed: Uint8Array;
-  state: RequestStateData;
-  randomness?: Uint8Array;
-};
+/** Byte offset of `status` inside BetState (after the discriminator). */
+export const BET_STATUS_OFFSET = 8 + 32 + 8 + 8 + 8 + 1;
+export const BET_STATE_SIZE = 235;
 
 export type RpcAccount = {
   lamports: bigint;
@@ -101,176 +88,135 @@ export type RpcAccount = {
   executable: boolean;
 };
 
-function base58(bs: Uint8Array): string {
-  return bs58.encode(bs);
-}
+const pubkeySlice = (d: Uint8Array, off: number) => bs58.encode(d.slice(off, off + 32));
+const view = (d: Uint8Array) => new DataView(d.buffer, d.byteOffset, d.byteLength);
+const u64At = (d: Uint8Array, off: number) => view(d).getBigUint64(off, true);
 
-function pubkeySlice(d: Uint8Array, off: number): string {
-  return base58(d.slice(off, off + 32));
-}
-
-function u64At(d: Uint8Array, off: number): bigint {
-  return new DataView(d.buffer, d.byteOffset, d.byteLength).getBigUint64(off, true);
-}
-
-function u16At(d: Uint8Array, off: number): number {
-  return new DataView(d.buffer, d.byteOffset, d.byteLength).getUint16(off, true);
-}
-
-// Skip the 8-byte anchor discriminator.
 export function parseHouseTreasury(d: Uint8Array): HouseTreasuryData {
-  const off = 8;
-  return {
-    authority: pubkeySlice(d, off),
-    paused: d[off + 32] === 1,
-    bump: d[off + 33],
-  };
+  return { authority: pubkeySlice(d, 8), paused: d[40] === 1, bump: d[41] };
 }
 
 export function parseGameConfig(d: Uint8Array): GameConfigData {
-  const off = 8;
   return {
-    gameId: d[off],
-    minBet: u64At(d, off + 1),
-    maxBet: u64At(d, off + 9),
-    houseEdgeBp: u16At(d, off + 17),
-    params: d.slice(off + 19, off + 51),
-    bump: d[off + 51],
+    gameId: d[8],
+    minBet: u64At(d, 9),
+    maxBet: u64At(d, 17),
+    paused: d[25] === 1,
+    bump: d[26],
   };
 }
 
 export function parsePlayerSession(d: Uint8Array): PlayerSessionData {
-  const off = 8;
   return {
-    player: pubkeySlice(d, off),
-    wagered: u64At(d, off + 32),
-    won: u64At(d, off + 40),
-    bets: u64At(d, off + 48),
-    bump: d[off + 56],
-  };
-}
-
-export function parsePendingSpin(d: Uint8Array): PendingSpinData {
-  const off = 8;
-  const statusByte = d[off + 32 + 1 + 8 + 8 + 32];
-  return {
-    player: pubkeySlice(d, off),
-    gameId: d[off + 32],
-    amount: u64At(d, off + 33),
-    target: u64At(d, off + 41),
-    seed: d.slice(off + 49, off + 81),
-    status: statusByte === 0 ? "AwaitingResolution" : "Resolved",
-    createdSlot: u64At(d, off + 82),
-    rentPayer: pubkeySlice(d, off + 90),
-    bump: d[off + 122],
+    player: pubkeySlice(d, 8),
+    wagered: u64At(d, 40),
+    won: u64At(d, 48),
+    bets: u64At(d, 56),
+    bump: d[64],
   };
 }
 
 export function parsePlayerVault(d: Uint8Array): PlayerVaultData {
-  const off = 8;
   return {
-    player: pubkeySlice(d, off),
-    balance: u64At(d, off + 32),
-    delegate: pubkeySlice(d, off + 40),
-    delegateExpiry: u64At(d, off + 72),
-    delegateSpendLeft: u64At(d, off + 80),
-    bump: d[off + 88],
-  };
-}
-
-export function parseChainState(d: Uint8Array): ChainStateData {
-  const off = 8;
-  return {
-    house: pubkeySlice(d, off),
-    seed: d.slice(off + 32, off + 64),
-    index: u64At(d, off + 64),
-    length: u64At(d, off + 72),
-    active: d[off + 80] === 1,
-    vrfEnabled: d[off + 81] === 1,
-    bump: d[off + 82],
+    player: pubkeySlice(d, 8),
+    balance: u64At(d, 40),
+    delegate: pubkeySlice(d, 48),
+    delegateExpiry: u64At(d, 80),
+    delegateSpendLeft: u64At(d, 88),
+    bump: d[96],
   };
 }
 
 export function parseCreditLedger(d: Uint8Array): CreditLedgerData {
-  const off = 8;
-  return { total: u64At(d, off), bump: d[off + 8] };
+  return { total: u64At(d, 8), reserved: u64At(d, 16), bump: d[24] };
 }
 
-export function parseNetworkState(d: Uint8Array): NetworkStateData {
-  const off = 8;
-  const bump = d[off];
-  const authority = pubkeySlice(d, off + 1);
-  const treasury = pubkeySlice(d, off + 33);
-  const requestFee = u64At(d, off + 65);
-  const callbackDeadline = u64At(d, off + 73);
-  const vecLen = new DataView(d.buffer, d.byteOffset, d.byteLength).getUint32(off + 81, true);
-  const authorities: string[] = [];
-  for (let i = 0; i < vecLen; i++) {
-    authorities.push(pubkeySlice(d, off + 85 + i * 32));
-  }
-  const tail = off + 85 + vecLen * 32;
+export function parseChainState(d: Uint8Array): ChainStateData {
+  let o = 8;
+  const house = pubkeySlice(d, o); o += 32;
+  const epoch = u64At(d, o); o += 8;
+  const genesis = d.slice(o, o + 32); o += 32;
+  const commitment = d.slice(o, o + 32); o += 32;
+  const index = u64At(d, o); o += 8;
+  const length = u64At(d, o); o += 8;
+  const nextSeq = u64At(d, o); o += 8;
+  const cursor = u64At(d, o); o += 8;
+  const stalls = u64At(d, o); o += 8;
+  const active = d[o] === 1; o += 1;
+  return { house, epoch, genesis, commitment, index, length, nextSeq, cursor, stalls, active, bump: d[o] };
+}
+
+export function parseBetState(d: Uint8Array): BetStateData {
+  let o = 8;
+  const player = pubkeySlice(d, o); o += 32;
+  const nonce = u64At(d, o); o += 8;
+  const seq = u64At(d, o); o += 8;
+  const chainEpoch = u64At(d, o); o += 8;
+  const gameId = d[o]; o += 1;
+  const status = BET_STATUS[d[o]] ?? "None"; o += 1;
+  const amount = u64At(d, o); o += 8;
+  const target = u64At(d, o); o += 8;
+  const clientSeed = d.slice(o, o + 32); o += 32;
+  const reserved = u64At(d, o); o += 8;
+  const placedSlot = u64At(d, o); o += 8;
+  const indexAtPlace = u64At(d, o); o += 8;
+  const commitment = d.slice(o, o + 32); o += 32;
+  const reveal = d.slice(o, o + 32); o += 32;
+  const revealIndex = u64At(d, o); o += 8;
+  const roll = u64At(d, o); o += 8;
+  const payout = u64At(d, o); o += 8;
+  const settledSlot = u64At(d, o); o += 8;
   return {
-    bump,
-    authority,
-    treasury,
-    requestFee,
-    callbackDeadline,
-    fulfillAuthorities: authorities,
-    numRequests: u64At(d, tail),
-    numRegistered: u64At(d, tail + 8),
-    numTerminated: u64At(d, tail + 16),
+    player, nonce, seq, chainEpoch, gameId, status, amount, target, clientSeed, reserved,
+    placedSlot, indexAtPlace, commitment, reveal, revealIndex, roll, payout, settledSlot,
+    bump: d[o],
   };
 }
 
-export function parseClient(d: Uint8Array): ClientData {
-  const off = 8;
-  // bump, owner, program, state, num_requests, callback: Option<ValidatedCallback>
-  const numRequests = u64At(d, off + 97);
-  const optByte = d[off + 105];
-  if (optByte !== 0 && optByte !== 1) {
-    throw new Error(`unexpected Option tag ${optByte} in client`);
-  }
-  return {
-    bump: d[off],
-    owner: pubkeySlice(d, off + 1),
-    program: pubkeySlice(d, off + 33),
-    state: pubkeySlice(d, off + 65),
-    numRequests,
-  };
+function decodeData(dataRaw: unknown): Uint8Array | null {
+  const b64 = Array.isArray(dataRaw) ? (dataRaw[0] as string) : (dataRaw as string);
+  return typeof b64 === "string" && b64 !== ""
+    ? Uint8Array.from(Buffer.from(b64, "base64"))
+    : null;
 }
 
-export function parseRequestAccount(d: Uint8Array): RequestAccountData {
-  const off = 8;
-  const bump = d[off];
-  const slot = u64At(d, off + 1);
-  const client = pubkeySlice(d, off + 9);
-  const seed = d.slice(off + 41, off + 73);
-  const tag = d[off + 73];
-  if (tag === 0) {
-    return { bump, slot, client, seed, state: "Pending" };
-  }
-  const randomness = d.slice(off + 74, off + 138);
-  return { bump, slot, client, seed, state: "Fulfilled", randomness };
-}
-
-export async function fetchAccount(
-  bundle: RpcBundle,
-  address: string,
-): Promise<RpcAccount | null> {
+export async function fetchAccount(bundle: RpcBundle, address: string): Promise<RpcAccount | null> {
   const { value } = await bundle.rpc
-    .getAccountInfo(address as Address, { encoding: "base64" })
+    .getAccountInfo(address as Address, { encoding: "base64", commitment: bundle.commitment })
     .send();
   if (value === null) return null;
-  const dataRaw = value.data;
-  const b64 = Array.isArray(dataRaw) ? (dataRaw[0] as string) : (dataRaw as string);
-  const dataBytes =
-    typeof b64 === "string" && b64 !== ""
-      ? Uint8Array.from(Buffer.from(b64, "base64"))
-      : null;
   return {
     lamports: value.lamports,
     owner: value.owner,
-    data: dataBytes,
+    data: decodeData(value.data),
     executable: value.executable,
   };
+}
+
+/** All accounts of one Anchor type owned by the program, optionally filtered. */
+export async function fetchProgramAccounts(
+  bundle: RpcBundle,
+  programId: string,
+  discriminatorName: string,
+  extraFilters: { offset: number; bytes: Uint8Array }[] = [],
+): Promise<{ address: string; data: Uint8Array }[]> {
+  const filters = [
+    { memcmp: { offset: 0n, bytes: bs58.encode(accountDiscriminator(discriminatorName)), encoding: "base58" as const } },
+    ...extraFilters.map((f) => ({
+      memcmp: { offset: BigInt(f.offset), bytes: bs58.encode(f.bytes), encoding: "base58" as const },
+    })),
+  ];
+  const result = await bundle.rpc
+    .getProgramAccounts(programId as Address, {
+      encoding: "base64",
+      commitment: bundle.commitment,
+      filters,
+    } as never)
+    .send();
+  const out: { address: string; data: Uint8Array }[] = [];
+  for (const entry of result as unknown as { pubkey: string; account: { data: unknown } }[]) {
+    const data = decodeData(entry.account.data);
+    if (data) out.push({ address: entry.pubkey, data });
+  }
+  return out;
 }

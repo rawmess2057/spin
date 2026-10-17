@@ -10,10 +10,8 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
-  getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
-  getProgramDerivedAddress,
   getStructDecoder,
   getStructEncoder,
   getU64Decoder,
@@ -41,16 +39,15 @@ import {
 import {
   getAccountMetaFactory,
   getAddressFromResolvedInstructionAccount,
-  getNonNullResolvedInstructionInput,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import {
+  findBetPda,
+  findChainPda,
   findCreditsPda,
-  findPendingPda,
   findSessionPda,
   findTreasuryPda,
   findVaultPda,
-  findVrfStatePda,
 } from "../pdas";
 import { SPIN_PROGRAM_ADDRESS } from "../programs";
 
@@ -67,18 +64,12 @@ export type PlaceBetInstruction<
   TAccountAuthority extends string | AccountMeta<string> = string,
   TAccountPlayer extends string | AccountMeta<string> = string,
   TAccountTreasury extends string | AccountMeta<string> = string,
+  TAccountChain extends string | AccountMeta<string> = string,
+  TAccountConfig extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountCredits extends string | AccountMeta<string> = string,
   TAccountSession extends string | AccountMeta<string> = string,
-  TAccountConfig extends string | AccountMeta<string> = string,
-  TAccountVrfState extends string | AccountMeta<string> = string,
-  TAccountPending extends string | AccountMeta<string> = string,
-  TAccountClient extends string | AccountMeta<string> = string,
-  TAccountNetworkState extends string | AccountMeta<string> = string,
-  TAccountVrfTreasury extends string | AccountMeta<string> = string,
-  TAccountRequest extends string | AccountMeta<string> = string,
-  TAccountVrfProgram extends string | AccountMeta<string> =
-    "VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU",
+  TAccountBet extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -94,8 +85,14 @@ export type PlaceBetInstruction<
         ? ReadonlyAccount<TAccountPlayer>
         : TAccountPlayer,
       TAccountTreasury extends string
-        ? WritableAccount<TAccountTreasury>
+        ? ReadonlyAccount<TAccountTreasury>
         : TAccountTreasury,
+      TAccountChain extends string
+        ? WritableAccount<TAccountChain>
+        : TAccountChain,
+      TAccountConfig extends string
+        ? ReadonlyAccount<TAccountConfig>
+        : TAccountConfig,
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
@@ -105,30 +102,7 @@ export type PlaceBetInstruction<
       TAccountSession extends string
         ? WritableAccount<TAccountSession>
         : TAccountSession,
-      TAccountConfig extends string
-        ? ReadonlyAccount<TAccountConfig>
-        : TAccountConfig,
-      TAccountVrfState extends string
-        ? WritableAccount<TAccountVrfState>
-        : TAccountVrfState,
-      TAccountPending extends string
-        ? WritableAccount<TAccountPending>
-        : TAccountPending,
-      TAccountClient extends string
-        ? WritableAccount<TAccountClient>
-        : TAccountClient,
-      TAccountNetworkState extends string
-        ? WritableAccount<TAccountNetworkState>
-        : TAccountNetworkState,
-      TAccountVrfTreasury extends string
-        ? WritableAccount<TAccountVrfTreasury>
-        : TAccountVrfTreasury,
-      TAccountRequest extends string
-        ? WritableAccount<TAccountRequest>
-        : TAccountRequest,
-      TAccountVrfProgram extends string
-        ? ReadonlyAccount<TAccountVrfProgram>
-        : TAccountVrfProgram,
+      TAccountBet extends string ? WritableAccount<TAccountBet> : TAccountBet,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -141,14 +115,14 @@ export type PlaceBetInstructionData = {
   gameId: number;
   amount: bigint;
   target: bigint;
-  seed: ReadonlyUint8Array;
+  clientSeed: ReadonlyUint8Array;
 };
 
 export type PlaceBetInstructionDataArgs = {
   gameId: number;
   amount: number | bigint;
   target: number | bigint;
-  seed: ReadonlyUint8Array;
+  clientSeed: ReadonlyUint8Array;
 };
 
 export function getPlaceBetInstructionDataEncoder(): FixedSizeEncoder<PlaceBetInstructionDataArgs> {
@@ -158,7 +132,7 @@ export function getPlaceBetInstructionDataEncoder(): FixedSizeEncoder<PlaceBetIn
       ["gameId", getU8Encoder()],
       ["amount", getU64Encoder()],
       ["target", getU64Encoder()],
-      ["seed", fixEncoderSize(getBytesEncoder(), 32)],
+      ["clientSeed", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
     (value) => ({ ...value, discriminator: PLACE_BET_DISCRIMINATOR })
   );
@@ -170,7 +144,7 @@ export function getPlaceBetInstructionDataDecoder(): FixedSizeDecoder<PlaceBetIn
     ["gameId", getU8Decoder()],
     ["amount", getU64Decoder()],
     ["target", getU64Decoder()],
-    ["seed", fixDecoderSize(getBytesDecoder(), 32)],
+    ["clientSeed", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
@@ -188,59 +162,44 @@ export type PlaceBetAsyncInput<
   TAccountAuthority extends string = string,
   TAccountPlayer extends string = string,
   TAccountTreasury extends string = string,
+  TAccountChain extends string = string,
+  TAccountConfig extends string = string,
   TAccountVault extends string = string,
   TAccountCredits extends string = string,
   TAccountSession extends string = string,
-  TAccountConfig extends string = string,
-  TAccountVrfState extends string = string,
-  TAccountPending extends string = string,
-  TAccountClient extends string = string,
-  TAccountNetworkState extends string = string,
-  TAccountVrfTreasury extends string = string,
-  TAccountRequest extends string = string,
-  TAccountVrfProgram extends string = string,
+  TAccountBet extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   /**
-   * Pays the transaction fee and the pending account's rent. Either the
-   * player themselves or the session key they authorized.
+   * Pays the transaction fee and, the first time, the session and bet
+   * accounts' rent. Either the player themselves or their session key.
    */
   authority: TransactionSigner<TAccountAuthority>;
   player: Address<TAccountPlayer>;
   treasury?: Address<TAccountTreasury>;
+  chain?: Address<TAccountChain>;
+  config: Address<TAccountConfig>;
   vault?: Address<TAccountVault>;
   credits?: Address<TAccountCredits>;
   session?: Address<TAccountSession>;
-  config: Address<TAccountConfig>;
-  vrfState?: Address<TAccountVrfState>;
-  pending?: Address<TAccountPending>;
-  client?: Address<TAccountClient>;
-  networkState?: Address<TAccountNetworkState>;
-  vrfTreasury: Address<TAccountVrfTreasury>;
-  request?: Address<TAccountRequest>;
-  vrfProgram?: Address<TAccountVrfProgram>;
+  bet?: Address<TAccountBet>;
   systemProgram?: Address<TAccountSystemProgram>;
   gameId: PlaceBetInstructionDataArgs["gameId"];
   amount: PlaceBetInstructionDataArgs["amount"];
   target: PlaceBetInstructionDataArgs["target"];
-  seed: PlaceBetInstructionDataArgs["seed"];
+  clientSeed: PlaceBetInstructionDataArgs["clientSeed"];
 };
 
 export async function getPlaceBetInstructionAsync<
   TAccountAuthority extends string,
   TAccountPlayer extends string,
   TAccountTreasury extends string,
+  TAccountChain extends string,
+  TAccountConfig extends string,
   TAccountVault extends string,
   TAccountCredits extends string,
   TAccountSession extends string,
-  TAccountConfig extends string,
-  TAccountVrfState extends string,
-  TAccountPending extends string,
-  TAccountClient extends string,
-  TAccountNetworkState extends string,
-  TAccountVrfTreasury extends string,
-  TAccountRequest extends string,
-  TAccountVrfProgram extends string,
+  TAccountBet extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SPIN_PROGRAM_ADDRESS,
 >(
@@ -248,17 +207,12 @@ export async function getPlaceBetInstructionAsync<
     TAccountAuthority,
     TAccountPlayer,
     TAccountTreasury,
+    TAccountChain,
+    TAccountConfig,
     TAccountVault,
     TAccountCredits,
     TAccountSession,
-    TAccountConfig,
-    TAccountVrfState,
-    TAccountPending,
-    TAccountClient,
-    TAccountNetworkState,
-    TAccountVrfTreasury,
-    TAccountRequest,
-    TAccountVrfProgram,
+    TAccountBet,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress }
@@ -268,17 +222,12 @@ export async function getPlaceBetInstructionAsync<
     TAccountAuthority,
     TAccountPlayer,
     TAccountTreasury,
+    TAccountChain,
+    TAccountConfig,
     TAccountVault,
     TAccountCredits,
     TAccountSession,
-    TAccountConfig,
-    TAccountVrfState,
-    TAccountPending,
-    TAccountClient,
-    TAccountNetworkState,
-    TAccountVrfTreasury,
-    TAccountRequest,
-    TAccountVrfProgram,
+    TAccountBet,
     TAccountSystemProgram
   >
 > {
@@ -289,18 +238,13 @@ export async function getPlaceBetInstructionAsync<
   const originalAccounts = {
     authority: { value: input.authority ?? null, isWritable: true },
     player: { value: input.player ?? null, isWritable: false },
-    treasury: { value: input.treasury ?? null, isWritable: true },
+    treasury: { value: input.treasury ?? null, isWritable: false },
+    chain: { value: input.chain ?? null, isWritable: true },
+    config: { value: input.config ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
     credits: { value: input.credits ?? null, isWritable: true },
     session: { value: input.session ?? null, isWritable: true },
-    config: { value: input.config ?? null, isWritable: false },
-    vrfState: { value: input.vrfState ?? null, isWritable: true },
-    pending: { value: input.pending ?? null, isWritable: true },
-    client: { value: input.client ?? null, isWritable: true },
-    networkState: { value: input.networkState ?? null, isWritable: true },
-    vrfTreasury: { value: input.vrfTreasury ?? null, isWritable: true },
-    request: { value: input.request ?? null, isWritable: true },
-    vrfProgram: { value: input.vrfProgram ?? null, isWritable: false },
+    bet: { value: input.bet ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -314,6 +258,9 @@ export async function getPlaceBetInstructionAsync<
   // Resolve default values.
   if (!accounts.treasury.value) {
     accounts.treasury.value = await findTreasuryPda();
+  }
+  if (!accounts.chain.value) {
+    accounts.chain.value = await findChainPda();
   }
   if (!accounts.vault.value) {
     accounts.vault.value = await findVaultPda({
@@ -334,79 +281,13 @@ export async function getPlaceBetInstructionAsync<
       ),
     });
   }
-  if (!accounts.vrfState.value) {
-    accounts.vrfState.value = await findVrfStatePda();
-  }
-  if (!accounts.pending.value) {
-    accounts.pending.value = await findPendingPda({
-      seed: getNonNullResolvedInstructionInput("seed", args.seed),
+  if (!accounts.bet.value) {
+    accounts.bet.value = await findBetPda({
+      player: getAddressFromResolvedInstructionAccount(
+        "player",
+        accounts.player.value
+      ),
     });
-  }
-  if (!accounts.client.value) {
-    accounts.client.value = await getProgramDerivedAddress({
-      programAddress:
-        "VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU" as Address<"VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU">,
-      seeds: [
-        getBytesEncoder().encode(
-          new Uint8Array([
-            79, 114, 97, 111, 86, 114, 102, 67, 98, 67, 108, 105, 101, 110, 116,
-          ])
-        ),
-        getBytesEncoder().encode(
-          new Uint8Array([
-            131, 213, 92, 128, 154, 167, 42, 63, 111, 53, 87, 110, 239, 97, 156,
-            64, 129, 123, 132, 166, 249, 79, 118, 241, 249, 29, 178, 116, 76,
-            120, 7, 244,
-          ])
-        ),
-        getAddressEncoder().encode(
-          getAddressFromResolvedInstructionAccount(
-            "vrfState",
-            accounts.vrfState.value
-          )
-        ),
-      ],
-    });
-  }
-  if (!accounts.networkState.value) {
-    accounts.networkState.value = await getProgramDerivedAddress({
-      programAddress:
-        "VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU" as Address<"VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU">,
-      seeds: [
-        getBytesEncoder().encode(
-          new Uint8Array([
-            79, 114, 97, 111, 86, 114, 102, 67, 98, 67, 111, 110, 102, 105, 103,
-          ])
-        ),
-      ],
-    });
-  }
-  if (!accounts.request.value) {
-    accounts.request.value = await getProgramDerivedAddress({
-      programAddress:
-        "VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU" as Address<"VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU">,
-      seeds: [
-        getBytesEncoder().encode(
-          new Uint8Array([
-            79, 114, 97, 111, 86, 114, 102, 67, 98, 82, 101, 113, 117, 101, 115,
-            116,
-          ])
-        ),
-        getAddressEncoder().encode(
-          getAddressFromResolvedInstructionAccount(
-            "client",
-            accounts.client.value
-          )
-        ),
-        fixEncoderSize(getBytesEncoder(), 32).encode(
-          getNonNullResolvedInstructionInput("seed", args.seed)
-        ),
-      ],
-    });
-  }
-  if (!accounts.vrfProgram.value) {
-    accounts.vrfProgram.value =
-      "VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU" as Address<"VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU">;
   }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
@@ -419,17 +300,12 @@ export async function getPlaceBetInstructionAsync<
       getAccountMeta("authority", accounts.authority),
       getAccountMeta("player", accounts.player),
       getAccountMeta("treasury", accounts.treasury),
+      getAccountMeta("chain", accounts.chain),
+      getAccountMeta("config", accounts.config),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("credits", accounts.credits),
       getAccountMeta("session", accounts.session),
-      getAccountMeta("config", accounts.config),
-      getAccountMeta("vrfState", accounts.vrfState),
-      getAccountMeta("pending", accounts.pending),
-      getAccountMeta("client", accounts.client),
-      getAccountMeta("networkState", accounts.networkState),
-      getAccountMeta("vrfTreasury", accounts.vrfTreasury),
-      getAccountMeta("request", accounts.request),
-      getAccountMeta("vrfProgram", accounts.vrfProgram),
+      getAccountMeta("bet", accounts.bet),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getPlaceBetInstructionDataEncoder().encode(
@@ -441,17 +317,12 @@ export async function getPlaceBetInstructionAsync<
     TAccountAuthority,
     TAccountPlayer,
     TAccountTreasury,
+    TAccountChain,
+    TAccountConfig,
     TAccountVault,
     TAccountCredits,
     TAccountSession,
-    TAccountConfig,
-    TAccountVrfState,
-    TAccountPending,
-    TAccountClient,
-    TAccountNetworkState,
-    TAccountVrfTreasury,
-    TAccountRequest,
-    TAccountVrfProgram,
+    TAccountBet,
     TAccountSystemProgram
   >);
 }
@@ -460,59 +331,44 @@ export type PlaceBetInput<
   TAccountAuthority extends string = string,
   TAccountPlayer extends string = string,
   TAccountTreasury extends string = string,
+  TAccountChain extends string = string,
+  TAccountConfig extends string = string,
   TAccountVault extends string = string,
   TAccountCredits extends string = string,
   TAccountSession extends string = string,
-  TAccountConfig extends string = string,
-  TAccountVrfState extends string = string,
-  TAccountPending extends string = string,
-  TAccountClient extends string = string,
-  TAccountNetworkState extends string = string,
-  TAccountVrfTreasury extends string = string,
-  TAccountRequest extends string = string,
-  TAccountVrfProgram extends string = string,
+  TAccountBet extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   /**
-   * Pays the transaction fee and the pending account's rent. Either the
-   * player themselves or the session key they authorized.
+   * Pays the transaction fee and, the first time, the session and bet
+   * accounts' rent. Either the player themselves or their session key.
    */
   authority: TransactionSigner<TAccountAuthority>;
   player: Address<TAccountPlayer>;
   treasury: Address<TAccountTreasury>;
+  chain: Address<TAccountChain>;
+  config: Address<TAccountConfig>;
   vault: Address<TAccountVault>;
   credits: Address<TAccountCredits>;
   session: Address<TAccountSession>;
-  config: Address<TAccountConfig>;
-  vrfState: Address<TAccountVrfState>;
-  pending: Address<TAccountPending>;
-  client: Address<TAccountClient>;
-  networkState: Address<TAccountNetworkState>;
-  vrfTreasury: Address<TAccountVrfTreasury>;
-  request: Address<TAccountRequest>;
-  vrfProgram?: Address<TAccountVrfProgram>;
+  bet: Address<TAccountBet>;
   systemProgram?: Address<TAccountSystemProgram>;
   gameId: PlaceBetInstructionDataArgs["gameId"];
   amount: PlaceBetInstructionDataArgs["amount"];
   target: PlaceBetInstructionDataArgs["target"];
-  seed: PlaceBetInstructionDataArgs["seed"];
+  clientSeed: PlaceBetInstructionDataArgs["clientSeed"];
 };
 
 export function getPlaceBetInstruction<
   TAccountAuthority extends string,
   TAccountPlayer extends string,
   TAccountTreasury extends string,
+  TAccountChain extends string,
+  TAccountConfig extends string,
   TAccountVault extends string,
   TAccountCredits extends string,
   TAccountSession extends string,
-  TAccountConfig extends string,
-  TAccountVrfState extends string,
-  TAccountPending extends string,
-  TAccountClient extends string,
-  TAccountNetworkState extends string,
-  TAccountVrfTreasury extends string,
-  TAccountRequest extends string,
-  TAccountVrfProgram extends string,
+  TAccountBet extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SPIN_PROGRAM_ADDRESS,
 >(
@@ -520,17 +376,12 @@ export function getPlaceBetInstruction<
     TAccountAuthority,
     TAccountPlayer,
     TAccountTreasury,
+    TAccountChain,
+    TAccountConfig,
     TAccountVault,
     TAccountCredits,
     TAccountSession,
-    TAccountConfig,
-    TAccountVrfState,
-    TAccountPending,
-    TAccountClient,
-    TAccountNetworkState,
-    TAccountVrfTreasury,
-    TAccountRequest,
-    TAccountVrfProgram,
+    TAccountBet,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress }
@@ -539,17 +390,12 @@ export function getPlaceBetInstruction<
   TAccountAuthority,
   TAccountPlayer,
   TAccountTreasury,
+  TAccountChain,
+  TAccountConfig,
   TAccountVault,
   TAccountCredits,
   TAccountSession,
-  TAccountConfig,
-  TAccountVrfState,
-  TAccountPending,
-  TAccountClient,
-  TAccountNetworkState,
-  TAccountVrfTreasury,
-  TAccountRequest,
-  TAccountVrfProgram,
+  TAccountBet,
   TAccountSystemProgram
 > {
   // Program address.
@@ -559,18 +405,13 @@ export function getPlaceBetInstruction<
   const originalAccounts = {
     authority: { value: input.authority ?? null, isWritable: true },
     player: { value: input.player ?? null, isWritable: false },
-    treasury: { value: input.treasury ?? null, isWritable: true },
+    treasury: { value: input.treasury ?? null, isWritable: false },
+    chain: { value: input.chain ?? null, isWritable: true },
+    config: { value: input.config ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
     credits: { value: input.credits ?? null, isWritable: true },
     session: { value: input.session ?? null, isWritable: true },
-    config: { value: input.config ?? null, isWritable: false },
-    vrfState: { value: input.vrfState ?? null, isWritable: true },
-    pending: { value: input.pending ?? null, isWritable: true },
-    client: { value: input.client ?? null, isWritable: true },
-    networkState: { value: input.networkState ?? null, isWritable: true },
-    vrfTreasury: { value: input.vrfTreasury ?? null, isWritable: true },
-    request: { value: input.request ?? null, isWritable: true },
-    vrfProgram: { value: input.vrfProgram ?? null, isWritable: false },
+    bet: { value: input.bet ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -582,10 +423,6 @@ export function getPlaceBetInstruction<
   const args = { ...input };
 
   // Resolve default values.
-  if (!accounts.vrfProgram.value) {
-    accounts.vrfProgram.value =
-      "VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU" as Address<"VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU">;
-  }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
@@ -597,17 +434,12 @@ export function getPlaceBetInstruction<
       getAccountMeta("authority", accounts.authority),
       getAccountMeta("player", accounts.player),
       getAccountMeta("treasury", accounts.treasury),
+      getAccountMeta("chain", accounts.chain),
+      getAccountMeta("config", accounts.config),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("credits", accounts.credits),
       getAccountMeta("session", accounts.session),
-      getAccountMeta("config", accounts.config),
-      getAccountMeta("vrfState", accounts.vrfState),
-      getAccountMeta("pending", accounts.pending),
-      getAccountMeta("client", accounts.client),
-      getAccountMeta("networkState", accounts.networkState),
-      getAccountMeta("vrfTreasury", accounts.vrfTreasury),
-      getAccountMeta("request", accounts.request),
-      getAccountMeta("vrfProgram", accounts.vrfProgram),
+      getAccountMeta("bet", accounts.bet),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getPlaceBetInstructionDataEncoder().encode(
@@ -619,17 +451,12 @@ export function getPlaceBetInstruction<
     TAccountAuthority,
     TAccountPlayer,
     TAccountTreasury,
+    TAccountChain,
+    TAccountConfig,
     TAccountVault,
     TAccountCredits,
     TAccountSession,
-    TAccountConfig,
-    TAccountVrfState,
-    TAccountPending,
-    TAccountClient,
-    TAccountNetworkState,
-    TAccountVrfTreasury,
-    TAccountRequest,
-    TAccountVrfProgram,
+    TAccountBet,
     TAccountSystemProgram
   >);
 }
@@ -641,24 +468,19 @@ export type ParsedPlaceBetInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     /**
-     * Pays the transaction fee and the pending account's rent. Either the
-     * player themselves or the session key they authorized.
+     * Pays the transaction fee and, the first time, the session and bet
+     * accounts' rent. Either the player themselves or their session key.
      */
     authority: TAccountMetas[0];
     player: TAccountMetas[1];
     treasury: TAccountMetas[2];
-    vault: TAccountMetas[3];
-    credits: TAccountMetas[4];
-    session: TAccountMetas[5];
-    config: TAccountMetas[6];
-    vrfState: TAccountMetas[7];
-    pending: TAccountMetas[8];
-    client: TAccountMetas[9];
-    networkState: TAccountMetas[10];
-    vrfTreasury: TAccountMetas[11];
-    request: TAccountMetas[12];
-    vrfProgram: TAccountMetas[13];
-    systemProgram: TAccountMetas[14];
+    chain: TAccountMetas[3];
+    config: TAccountMetas[4];
+    vault: TAccountMetas[5];
+    credits: TAccountMetas[6];
+    session: TAccountMetas[7];
+    bet: TAccountMetas[8];
+    systemProgram: TAccountMetas[9];
   };
   data: PlaceBetInstructionData;
 };
@@ -671,12 +493,12 @@ export function parsePlaceBetInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>
 ): ParsedPlaceBetInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 15) {
+  if (instruction.accounts.length < 10) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 15,
+        expectedAccountMetas: 10,
       }
     );
   }
@@ -692,17 +514,12 @@ export function parsePlaceBetInstruction<
       authority: getNextAccount(),
       player: getNextAccount(),
       treasury: getNextAccount(),
+      chain: getNextAccount(),
+      config: getNextAccount(),
       vault: getNextAccount(),
       credits: getNextAccount(),
       session: getNextAccount(),
-      config: getNextAccount(),
-      vrfState: getNextAccount(),
-      pending: getNextAccount(),
-      client: getNextAccount(),
-      networkState: getNextAccount(),
-      vrfTreasury: getNextAccount(),
-      request: getNextAccount(),
-      vrfProgram: getNextAccount(),
+      bet: getNextAccount(),
       systemProgram: getNextAccount(),
     },
     data: getPlaceBetInstructionDataDecoder().decode(instruction.data),

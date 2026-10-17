@@ -14,10 +14,6 @@ import {
   getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
-  getU8Decoder,
-  getU8Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
   SolanaError,
   transformEncoder,
@@ -42,49 +38,44 @@ import {
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import {
+  findBetPda,
   findChainPda,
   findCreditsPda,
   findSessionPda,
-  findTreasuryPda,
   findVaultPda,
 } from "../pdas";
 import { SPIN_PROGRAM_ADDRESS } from "../programs";
 
-export const SPIN_CHAIN_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  104, 79, 99, 255, 165, 160, 242, 112,
+export const SETTLE_BET_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
+  115, 55, 234, 177, 227, 4, 10, 67,
 ]);
 
-export function getSpinChainDiscriminatorBytes(): ReadonlyUint8Array {
-  return fixEncoderSize(getBytesEncoder(), 8).encode(SPIN_CHAIN_DISCRIMINATOR);
+export function getSettleBetDiscriminatorBytes(): ReadonlyUint8Array {
+  return fixEncoderSize(getBytesEncoder(), 8).encode(SETTLE_BET_DISCRIMINATOR);
 }
 
-export type SpinChainInstruction<
+export type SettleBetInstruction<
   TProgram extends string = typeof SPIN_PROGRAM_ADDRESS,
-  TAccountAuthority extends string | AccountMeta<string> = string,
+  TAccountCranker extends string | AccountMeta<string> = string,
   TAccountPlayer extends string | AccountMeta<string> = string,
-  TAccountTreasury extends string | AccountMeta<string> = string,
+  TAccountBet extends string | AccountMeta<string> = string,
   TAccountChain extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountCredits extends string | AccountMeta<string> = string,
   TAccountSession extends string | AccountMeta<string> = string,
-  TAccountConfig extends string | AccountMeta<string> = string,
-  TAccountSystemProgram extends string | AccountMeta<string> =
-    "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
-      TAccountAuthority extends string
-        ? WritableSignerAccount<TAccountAuthority> &
-            AccountSignerMeta<TAccountAuthority>
-        : TAccountAuthority,
+      TAccountCranker extends string
+        ? WritableSignerAccount<TAccountCranker> &
+            AccountSignerMeta<TAccountCranker>
+        : TAccountCranker,
       TAccountPlayer extends string
         ? ReadonlyAccount<TAccountPlayer>
         : TAccountPlayer,
-      TAccountTreasury extends string
-        ? WritableAccount<TAccountTreasury>
-        : TAccountTreasury,
+      TAccountBet extends string ? WritableAccount<TAccountBet> : TAccountBet,
       TAccountChain extends string
         ? WritableAccount<TAccountChain>
         : TAccountChain,
@@ -97,130 +88,94 @@ export type SpinChainInstruction<
       TAccountSession extends string
         ? WritableAccount<TAccountSession>
         : TAccountSession,
-      TAccountConfig extends string
-        ? ReadonlyAccount<TAccountConfig>
-        : TAccountConfig,
-      TAccountSystemProgram extends string
-        ? ReadonlyAccount<TAccountSystemProgram>
-        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
 
-export type SpinChainInstructionData = {
+export type SettleBetInstructionData = {
   discriminator: ReadonlyUint8Array;
-  gameId: number;
-  amount: bigint;
-  target: bigint;
   reveal: ReadonlyUint8Array;
 };
 
-export type SpinChainInstructionDataArgs = {
-  gameId: number;
-  amount: number | bigint;
-  target: number | bigint;
-  reveal: ReadonlyUint8Array;
-};
+export type SettleBetInstructionDataArgs = { reveal: ReadonlyUint8Array };
 
-export function getSpinChainInstructionDataEncoder(): FixedSizeEncoder<SpinChainInstructionDataArgs> {
+export function getSettleBetInstructionDataEncoder(): FixedSizeEncoder<SettleBetInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["gameId", getU8Encoder()],
-      ["amount", getU64Encoder()],
-      ["target", getU64Encoder()],
       ["reveal", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
-    (value) => ({ ...value, discriminator: SPIN_CHAIN_DISCRIMINATOR })
+    (value) => ({ ...value, discriminator: SETTLE_BET_DISCRIMINATOR })
   );
 }
 
-export function getSpinChainInstructionDataDecoder(): FixedSizeDecoder<SpinChainInstructionData> {
+export function getSettleBetInstructionDataDecoder(): FixedSizeDecoder<SettleBetInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["gameId", getU8Decoder()],
-    ["amount", getU64Decoder()],
-    ["target", getU64Decoder()],
     ["reveal", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
-export function getSpinChainInstructionDataCodec(): FixedSizeCodec<
-  SpinChainInstructionDataArgs,
-  SpinChainInstructionData
+export function getSettleBetInstructionDataCodec(): FixedSizeCodec<
+  SettleBetInstructionDataArgs,
+  SettleBetInstructionData
 > {
   return combineCodec(
-    getSpinChainInstructionDataEncoder(),
-    getSpinChainInstructionDataDecoder()
+    getSettleBetInstructionDataEncoder(),
+    getSettleBetInstructionDataDecoder()
   );
 }
 
-export type SpinChainAsyncInput<
-  TAccountAuthority extends string = string,
+export type SettleBetAsyncInput<
+  TAccountCranker extends string = string,
   TAccountPlayer extends string = string,
-  TAccountTreasury extends string = string,
+  TAccountBet extends string = string,
   TAccountChain extends string = string,
   TAccountVault extends string = string,
   TAccountCredits extends string = string,
   TAccountSession extends string = string,
-  TAccountConfig extends string = string,
-  TAccountSystemProgram extends string = string,
 > = {
-  /**
-   * Pays the transaction fee and (first time) the session account's rent.
-   * Either the player themselves or the session key they authorized.
-   */
-  authority: TransactionSigner<TAccountAuthority>;
+  /** Whoever submits the reveal; pays the fee. */
+  cranker: TransactionSigner<TAccountCranker>;
   player: Address<TAccountPlayer>;
-  treasury?: Address<TAccountTreasury>;
+  bet?: Address<TAccountBet>;
   chain?: Address<TAccountChain>;
   vault?: Address<TAccountVault>;
   credits?: Address<TAccountCredits>;
   session?: Address<TAccountSession>;
-  config: Address<TAccountConfig>;
-  systemProgram?: Address<TAccountSystemProgram>;
-  gameId: SpinChainInstructionDataArgs["gameId"];
-  amount: SpinChainInstructionDataArgs["amount"];
-  target: SpinChainInstructionDataArgs["target"];
-  reveal: SpinChainInstructionDataArgs["reveal"];
+  reveal: SettleBetInstructionDataArgs["reveal"];
 };
 
-export async function getSpinChainInstructionAsync<
-  TAccountAuthority extends string,
+export async function getSettleBetInstructionAsync<
+  TAccountCranker extends string,
   TAccountPlayer extends string,
-  TAccountTreasury extends string,
+  TAccountBet extends string,
   TAccountChain extends string,
   TAccountVault extends string,
   TAccountCredits extends string,
   TAccountSession extends string,
-  TAccountConfig extends string,
-  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SPIN_PROGRAM_ADDRESS,
 >(
-  input: SpinChainAsyncInput<
-    TAccountAuthority,
+  input: SettleBetAsyncInput<
+    TAccountCranker,
     TAccountPlayer,
-    TAccountTreasury,
+    TAccountBet,
     TAccountChain,
     TAccountVault,
     TAccountCredits,
-    TAccountSession,
-    TAccountConfig,
-    TAccountSystemProgram
+    TAccountSession
   >,
   config?: { programAddress?: TProgramAddress }
 ): Promise<
-  SpinChainInstruction<
+  SettleBetInstruction<
     TProgramAddress,
-    TAccountAuthority,
+    TAccountCranker,
     TAccountPlayer,
-    TAccountTreasury,
+    TAccountBet,
     TAccountChain,
     TAccountVault,
     TAccountCredits,
-    TAccountSession,
-    TAccountConfig,
-    TAccountSystemProgram
+    TAccountSession
   >
 > {
   // Program address.
@@ -228,15 +183,13 @@ export async function getSpinChainInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    authority: { value: input.authority ?? null, isWritable: true },
+    cranker: { value: input.cranker ?? null, isWritable: true },
     player: { value: input.player ?? null, isWritable: false },
-    treasury: { value: input.treasury ?? null, isWritable: true },
+    bet: { value: input.bet ?? null, isWritable: true },
     chain: { value: input.chain ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: true },
     credits: { value: input.credits ?? null, isWritable: true },
     session: { value: input.session ?? null, isWritable: true },
-    config: { value: input.config ?? null, isWritable: false },
-    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -247,8 +200,13 @@ export async function getSpinChainInstructionAsync<
   const args = { ...input };
 
   // Resolve default values.
-  if (!accounts.treasury.value) {
-    accounts.treasury.value = await findTreasuryPda();
+  if (!accounts.bet.value) {
+    accounts.bet.value = await findBetPda({
+      player: getAddressFromResolvedInstructionAccount(
+        "player",
+        accounts.player.value
+      ),
+    });
   }
   if (!accounts.chain.value) {
     accounts.chain.value = await findChainPda();
@@ -272,122 +230,96 @@ export async function getSpinChainInstructionAsync<
       ),
     });
   }
-  if (!accounts.systemProgram.value) {
-    accounts.systemProgram.value =
-      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
-  }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
-      getAccountMeta("authority", accounts.authority),
+      getAccountMeta("cranker", accounts.cranker),
       getAccountMeta("player", accounts.player),
-      getAccountMeta("treasury", accounts.treasury),
+      getAccountMeta("bet", accounts.bet),
       getAccountMeta("chain", accounts.chain),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("credits", accounts.credits),
       getAccountMeta("session", accounts.session),
-      getAccountMeta("config", accounts.config),
-      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getSpinChainInstructionDataEncoder().encode(
-      args as SpinChainInstructionDataArgs
+    data: getSettleBetInstructionDataEncoder().encode(
+      args as SettleBetInstructionDataArgs
     ),
     programAddress,
-  } as SpinChainInstruction<
+  } as SettleBetInstruction<
     TProgramAddress,
-    TAccountAuthority,
+    TAccountCranker,
     TAccountPlayer,
-    TAccountTreasury,
+    TAccountBet,
     TAccountChain,
     TAccountVault,
     TAccountCredits,
-    TAccountSession,
-    TAccountConfig,
-    TAccountSystemProgram
+    TAccountSession
   >);
 }
 
-export type SpinChainInput<
-  TAccountAuthority extends string = string,
+export type SettleBetInput<
+  TAccountCranker extends string = string,
   TAccountPlayer extends string = string,
-  TAccountTreasury extends string = string,
+  TAccountBet extends string = string,
   TAccountChain extends string = string,
   TAccountVault extends string = string,
   TAccountCredits extends string = string,
   TAccountSession extends string = string,
-  TAccountConfig extends string = string,
-  TAccountSystemProgram extends string = string,
 > = {
-  /**
-   * Pays the transaction fee and (first time) the session account's rent.
-   * Either the player themselves or the session key they authorized.
-   */
-  authority: TransactionSigner<TAccountAuthority>;
+  /** Whoever submits the reveal; pays the fee. */
+  cranker: TransactionSigner<TAccountCranker>;
   player: Address<TAccountPlayer>;
-  treasury: Address<TAccountTreasury>;
+  bet: Address<TAccountBet>;
   chain: Address<TAccountChain>;
   vault: Address<TAccountVault>;
   credits: Address<TAccountCredits>;
   session: Address<TAccountSession>;
-  config: Address<TAccountConfig>;
-  systemProgram?: Address<TAccountSystemProgram>;
-  gameId: SpinChainInstructionDataArgs["gameId"];
-  amount: SpinChainInstructionDataArgs["amount"];
-  target: SpinChainInstructionDataArgs["target"];
-  reveal: SpinChainInstructionDataArgs["reveal"];
+  reveal: SettleBetInstructionDataArgs["reveal"];
 };
 
-export function getSpinChainInstruction<
-  TAccountAuthority extends string,
+export function getSettleBetInstruction<
+  TAccountCranker extends string,
   TAccountPlayer extends string,
-  TAccountTreasury extends string,
+  TAccountBet extends string,
   TAccountChain extends string,
   TAccountVault extends string,
   TAccountCredits extends string,
   TAccountSession extends string,
-  TAccountConfig extends string,
-  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SPIN_PROGRAM_ADDRESS,
 >(
-  input: SpinChainInput<
-    TAccountAuthority,
+  input: SettleBetInput<
+    TAccountCranker,
     TAccountPlayer,
-    TAccountTreasury,
+    TAccountBet,
     TAccountChain,
     TAccountVault,
     TAccountCredits,
-    TAccountSession,
-    TAccountConfig,
-    TAccountSystemProgram
+    TAccountSession
   >,
   config?: { programAddress?: TProgramAddress }
-): SpinChainInstruction<
+): SettleBetInstruction<
   TProgramAddress,
-  TAccountAuthority,
+  TAccountCranker,
   TAccountPlayer,
-  TAccountTreasury,
+  TAccountBet,
   TAccountChain,
   TAccountVault,
   TAccountCredits,
-  TAccountSession,
-  TAccountConfig,
-  TAccountSystemProgram
+  TAccountSession
 > {
   // Program address.
   const programAddress = config?.programAddress ?? SPIN_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
-    authority: { value: input.authority ?? null, isWritable: true },
+    cranker: { value: input.cranker ?? null, isWritable: true },
     player: { value: input.player ?? null, isWritable: false },
-    treasury: { value: input.treasury ?? null, isWritable: true },
+    bet: { value: input.bet ?? null, isWritable: true },
     chain: { value: input.chain ?? null, isWritable: true },
     vault: { value: input.vault ?? null, isWritable: true },
     credits: { value: input.credits ?? null, isWritable: true },
     session: { value: input.session ?? null, isWritable: true },
-    config: { value: input.config ?? null, isWritable: false },
-    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -397,80 +329,65 @@ export function getSpinChainInstruction<
   // Original args.
   const args = { ...input };
 
-  // Resolve default values.
-  if (!accounts.systemProgram.value) {
-    accounts.systemProgram.value =
-      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
-  }
-
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
-      getAccountMeta("authority", accounts.authority),
+      getAccountMeta("cranker", accounts.cranker),
       getAccountMeta("player", accounts.player),
-      getAccountMeta("treasury", accounts.treasury),
+      getAccountMeta("bet", accounts.bet),
       getAccountMeta("chain", accounts.chain),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("credits", accounts.credits),
       getAccountMeta("session", accounts.session),
-      getAccountMeta("config", accounts.config),
-      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getSpinChainInstructionDataEncoder().encode(
-      args as SpinChainInstructionDataArgs
+    data: getSettleBetInstructionDataEncoder().encode(
+      args as SettleBetInstructionDataArgs
     ),
     programAddress,
-  } as SpinChainInstruction<
+  } as SettleBetInstruction<
     TProgramAddress,
-    TAccountAuthority,
+    TAccountCranker,
     TAccountPlayer,
-    TAccountTreasury,
+    TAccountBet,
     TAccountChain,
     TAccountVault,
     TAccountCredits,
-    TAccountSession,
-    TAccountConfig,
-    TAccountSystemProgram
+    TAccountSession
   >);
 }
 
-export type ParsedSpinChainInstruction<
+export type ParsedSettleBetInstruction<
   TProgram extends string = typeof SPIN_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    /**
-     * Pays the transaction fee and (first time) the session account's rent.
-     * Either the player themselves or the session key they authorized.
-     */
-    authority: TAccountMetas[0];
+    /** Whoever submits the reveal; pays the fee. */
+    cranker: TAccountMetas[0];
     player: TAccountMetas[1];
-    treasury: TAccountMetas[2];
+    bet: TAccountMetas[2];
     chain: TAccountMetas[3];
     vault: TAccountMetas[4];
     credits: TAccountMetas[5];
     session: TAccountMetas[6];
-    config: TAccountMetas[7];
-    systemProgram: TAccountMetas[8];
   };
-  data: SpinChainInstructionData;
+  data: SettleBetInstructionData;
 };
 
-export function parseSpinChainInstruction<
+export function parseSettleBetInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>
-): ParsedSpinChainInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 9) {
+): ParsedSettleBetInstruction<TProgram, TAccountMetas> {
+  if (instruction.accounts.length < 7) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 9,
+        expectedAccountMetas: 7,
       }
     );
   }
@@ -483,16 +400,14 @@ export function parseSpinChainInstruction<
   return {
     programAddress: instruction.programAddress,
     accounts: {
-      authority: getNextAccount(),
+      cranker: getNextAccount(),
       player: getNextAccount(),
-      treasury: getNextAccount(),
+      bet: getNextAccount(),
       chain: getNextAccount(),
       vault: getNextAccount(),
       credits: getNextAccount(),
       session: getNextAccount(),
-      config: getNextAccount(),
-      systemProgram: getNextAccount(),
     },
-    data: getSpinChainInstructionDataDecoder().decode(instruction.data),
+    data: getSettleBetInstructionDataDecoder().decode(instruction.data),
   };
 }

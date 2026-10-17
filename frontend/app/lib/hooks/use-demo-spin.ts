@@ -22,7 +22,8 @@ export type SpinSurface = {
   rolling: boolean;
   sessionReady: boolean;
   spendLeft: bigint;
-  betErrors: (lamports: bigint | null) => string[];
+  /** `target` lets on-chain surfaces apply per-option limits (bankroll cap). */
+  betErrors: (lamports: bigint | null, target?: bigint) => string[];
   placeBet: (lamports: bigint, target: bigint) => Promise<boolean>;
   reset: () => void;
 };
@@ -84,7 +85,7 @@ export function useDemoSpin<T extends { payout: bigint }>({
   maxBet = diamondsToLamports(1_000n),
   startBalance = diamondsToLamports(10_000n),
 }: {
-  evaluate: (randomness: Uint8Array, bet: bigint) => T;
+  evaluate: (randomness: Uint8Array, bet: bigint, target: bigint) => T;
   minSpinMs?: number;
   minBet?: bigint;
   maxBet?: bigint;
@@ -140,7 +141,6 @@ export function useDemoSpin<T extends { payout: bigint }>({
 
   const placeBet = useCallback(
     async (lamports: bigint, target: bigint): Promise<boolean> => {
-      void target; // unused in demo mode; kept for SpinSurface parity
       const current = getBalance(startBalance);
       if (lamports < minBet || lamports > maxBet || lamports > current) {
         return false;
@@ -159,7 +159,7 @@ export function useDemoSpin<T extends { payout: bigint }>({
       }
       if (!mounted.current) return false;
 
-      const result = evaluateRef.current(randomness, lamports);
+      const result = evaluateRef.current(randomness, lamports, target);
       if (result.payout > 0n) {
         commitBalance(getBalance(startBalance) + result.payout);
       }
