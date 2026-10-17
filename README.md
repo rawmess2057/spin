@@ -45,6 +45,7 @@ TREASURY_SOL=10 npm run init-house         # treasury, ledger, game limits 7–1
 npm run generate-chain                     # settle/data/chain.json (keep it secret)
 npm run init-chain                         # publishes the genesis commitment
 npm run settle                             # the crank; GET http://127.0.0.1:8788/health
+npm run smoke                              # (another shell) deposit + bet + wait for settlement + verify
 
 # 3. Frontend
 cd ../frontend && npm install

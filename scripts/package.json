@@ -13,7 +13,8 @@
     "generate-chain": "tsx settle/generate-chain.ts",
     "init-chain": "tsx settle/init-chain.ts",
     "rotate-chain": "tsx settle/rotate-chain.ts",
-    "settle": "tsx settle/server.ts"
+    "settle": "tsx settle/server.ts",
+    "smoke": "tsx smoke.ts"
   },
   "keywords": [],
   "author": "",
