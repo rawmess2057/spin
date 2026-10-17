@@ -2,14 +2,13 @@ use anchor_lang::prelude::*;
 
 use crate::constants::*;
 use crate::error::SpinError;
-use crate::state::{CreditLedger, GameConfig, HouseTreasury, VrfState};
+use crate::state::{CreditLedger, GameConfig, HouseTreasury};
 
-/// Creates the house treasury and the VRF request authority accounts.
+/// Creates the house treasury.
 pub fn init_config(ctx: Context<InitConfig>) -> Result<()> {
     ctx.accounts.treasury.authority = ctx.accounts.authority.key();
     ctx.accounts.treasury.paused = false;
     ctx.accounts.treasury.bump = ctx.bumps.treasury;
-    ctx.accounts.vrf_state.bump = ctx.bumps.vrf_state;
     msg!("House treasury initialized: {}", ctx.accounts.treasury.key());
     Ok(())
 }
@@ -26,34 +25,26 @@ pub struct InitConfig<'info> {
         bump
     )]
     pub treasury: Account<'info, HouseTreasury>,
-    #[account(
-        init,
-        payer = authority,
-        space = VrfState::SIZE,
-        seeds = [VRF_STATE_SEED],
-        bump
-    )]
-    pub vrf_state: Account<'info, VrfState>,
     pub system_program: Program<'info, System>,
 }
 
-/// Creates an immutable per-game configuration.
+/// Registers a game: creates its limits account. The paytable is code.
 pub fn init_game_config(
     ctx: Context<InitGameConfig>,
     game_id: u8,
     min_bet: u64,
     max_bet: u64,
-    house_edge_bp: u16,
-    params: [u8; 32],
 ) -> Result<()> {
+    // The registry must know the game, or bets on it could never settle.
+    crate::games::max_multiplier_bp(game_id, crate::games::default_target(game_id)?)?;
     require!(min_bet > 0 && max_bet >= min_bet, SpinError::BetBelowMinimum);
-    ctx.accounts.config.game_id = game_id;
-    ctx.accounts.config.min_bet = min_bet;
-    ctx.accounts.config.max_bet = max_bet;
-    ctx.accounts.config.house_edge_bp = house_edge_bp;
-    ctx.accounts.config.params = params;
-    ctx.accounts.config.bump = ctx.bumps.config;
-    msg!("Game config initialized for game {}: min={} max={}", game_id, min_bet, max_bet);
+    let config = &mut ctx.accounts.config;
+    config.game_id = game_id;
+    config.min_bet = min_bet;
+    config.max_bet = max_bet;
+    config.paused = false;
+    config.bump = ctx.bumps.config;
+    msg!("Game {} registered: min={} max={}", game_id, min_bet, max_bet);
     Ok(())
 }
 
@@ -65,7 +56,7 @@ pub struct InitGameConfig<'info> {
     #[account(has_one = authority @ SpinError::NotAuthority)]
     pub treasury: Account<'info, HouseTreasury>,
     #[account(
-        init_if_needed,
+        init,
         payer = authority,
         space = GameConfig::SIZE,
         seeds = [GAME_CONFIG_SEED, &[game_id]],
@@ -73,6 +64,35 @@ pub struct InitGameConfig<'info> {
     )]
     pub config: Account<'info, GameConfig>,
     pub system_program: Program<'info, System>,
+}
+
+/// Adjusts a game's bet limits or pauses it. Open bets are unaffected: their
+/// stake and reservation were fixed at placement.
+pub fn set_game_limits(
+    ctx: Context<SetGameLimits>,
+    min_bet: u64,
+    max_bet: u64,
+    paused: bool,
+) -> Result<()> {
+    require!(min_bet > 0 && max_bet >= min_bet, SpinError::BetBelowMinimum);
+    let config = &mut ctx.accounts.config;
+    config.min_bet = min_bet;
+    config.max_bet = max_bet;
+    config.paused = paused;
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct SetGameLimits<'info> {
+    pub authority: Signer<'info>,
+    #[account(has_one = authority @ SpinError::NotAuthority)]
+    pub treasury: Account<'info, HouseTreasury>,
+    #[account(
+        mut,
+        seeds = [GAME_CONFIG_SEED, &[config.game_id]],
+        bump = config.bump
+    )]
+    pub config: Account<'info, GameConfig>,
 }
 
 /// Pauses / resumes betting house-wide.
@@ -115,26 +135,28 @@ pub fn treasury_deposit(ctx: Context<TreasuryDeposit>, amount: u64) -> Result<()
 ///
 /// Player deposits are commingled here, so the withdrawal is capped at what is
 /// genuinely the house's: whatever remains after covering every outstanding
-/// player credit plus the treasury's own rent. This is what makes the house
-/// authority unable to take player money.
+/// player credit, every payout reserved by an open bet, and the treasury's
+/// own rent. This is what makes the house authority unable to take player
+/// money or money an in-flight bet may win.
 pub fn treasury_withdraw(ctx: Context<TreasuryWithdraw>, amount: u64) -> Result<()> {
     let treasury_lamports = ctx.accounts.treasury.get_lamports();
     require!(amount <= treasury_lamports, SpinError::TreasuryBalanceTooLow);
 
     let rent_floor = Rent::get()?.minimum_balance(HouseTreasury::SIZE);
-    let reserved = ctx
+    let committed = ctx
         .accounts
         .credits
         .total
-        .checked_add(rent_floor)
+        .checked_add(ctx.accounts.credits.reserved)
+        .and_then(|v| v.checked_add(rent_floor))
         .ok_or(SpinError::ArithmeticOverflow)?;
     require!(
-        treasury_lamports.saturating_sub(amount) >= reserved,
+        treasury_lamports.saturating_sub(amount) >= committed,
         SpinError::TreasuryInsolvent
     );
 
-    // Note: the system program's Transfer requires `from` to carry no data,
-    // so the treasury (a data-carrying PDA) is moved via direct lamport ops.
+    // The system program's Transfer requires `from` to carry no data, so the
+    // treasury (a data-carrying PDA) is moved via direct lamport ops.
     ctx.accounts.treasury.to_account_info().sub_lamports(amount)?;
     ctx.accounts.authority.to_account_info().add_lamports(amount)?;
     Ok(())

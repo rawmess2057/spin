@@ -4,37 +4,23 @@ use anchor_lang::prelude::*;
 pub enum SpinError {
     #[msg("House is paused")]
     HousePaused,
+    #[msg("This game is paused")]
+    GamePaused,
     #[msg("Only the house authority may perform this action")]
     NotAuthority,
     #[msg("Bet below minimum")]
     BetBelowMinimum,
     #[msg("Bet above maximum")]
     BetAboveMaximum,
-    #[msg("Bet exceeds the house bankroll limit (1% of treasury)")]
-    BetExceedsBankrollLimit,
+    #[msg("The bet's maximum payout exceeds what the bankroll can cover")]
+    MaxPayoutExceedsBankroll,
     #[msg("Treasury balance is too low")]
     TreasuryBalanceTooLow,
-    #[msg("Target out of range")]
-    TargetOutOfRange,
+    #[msg("Target out of range for this game")]
+    InvalidTarget,
     #[msg("Unknown game")]
     UnknownGame,
-    #[msg("Spin is already resolved")]
-    AlreadyResolved,
-    #[msg("Spin is not yet resolvable")]
-    SpinNotResolvable,
-    #[msg("Randomness request is not fulfilled yet")]
-    RandomnessPending,
-    #[msg("Pending account does not match the randomness request")]
-    PendingMismatch,
-    #[msg("Client PDA does not match the registered VRF client")]
-    ClientMismatch,
-    #[msg("Treasury account does not match the network configuration")]
-    TreasuryMismatch,
-    #[msg("Request account does not match the VRF request PDA")]
-    RequestMismatch,
-    #[msg("Network state account is invalid")]
-    NetworkStateMismatch,
-    #[msg("Payout calculation overflow")]
+    #[msg("Arithmetic overflow")]
     ArithmeticOverflow,
     #[msg("Invalid player")]
     InvalidPlayer,
@@ -48,16 +34,24 @@ pub enum SpinError {
     InsufficientCredits,
     #[msg("Withdrawal would leave the treasury unable to cover player credits")]
     TreasuryInsolvent,
-    #[msg("VRF betting is disabled; use the instant reveal chain")]
-    VrfBettingDisabled,
     #[msg("The reveal chain is not active")]
     ChainInactive,
-    #[msg("Reveal does not match the chain head; fetch the next reveal and retry")]
-    ChainStale,
-    #[msg("The reveal chain is exhausted; the house must initialize a new chain")]
+    #[msg("The reveal chain is exhausted; the house must rotate a new chain")]
     ChainExhausted,
     #[msg("Chain length is out of range")]
     ChainTooLong,
-    #[msg("The current chain is not exhausted yet")]
-    ChainStillActive,
+    #[msg("The chain still has open bets; settle or cancel them before rotating")]
+    ChainHasOpenBets,
+    #[msg("Reveal is not the preimage of the current chain commitment")]
+    ChainBadReveal,
+    #[msg("Bet was placed under a previous chain epoch")]
+    ChainEpochMismatch,
+    #[msg("Player already has an open bet; wait for it to settle")]
+    BetAlreadyOpen,
+    #[msg("Bet is not open")]
+    BetNotOpen,
+    #[msg("Bet is not at the head of the settlement queue")]
+    BetNotHead,
+    #[msg("Bet has not timed out yet")]
+    BetNotTimedOut,
 }
