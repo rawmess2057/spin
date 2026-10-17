@@ -9,6 +9,7 @@ use solana_sha256_hasher::{hash, hashv};
 use crate::constants::*;
 use crate::error::SpinError;
 
+pub mod hold_spin;
 pub mod megaways;
 pub mod plinko;
 pub mod wheel;
@@ -41,6 +42,7 @@ pub fn validate_target(game_id: u8, target: u64) -> Result<()> {
         GAME_PLINKO => plinko::validate_target(target),
         GAME_MEGAWAYS => megaways::validate_target(target),
         GAME_WHEEL => wheel::validate_target(target),
+        GAME_HOLD_SPIN => hold_spin::validate_target(target),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }
@@ -52,6 +54,7 @@ pub fn default_target(game_id: u8) -> Result<u64> {
         GAME_PLINKO => Ok(plinko::encode_target(plinko::MIN_ROWS, plinko::RISK_LOW)),
         GAME_MEGAWAYS => Ok(0),
         GAME_WHEEL => Ok(wheel::RISK_LOW),
+        GAME_HOLD_SPIN => Ok(0),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }
@@ -64,6 +67,7 @@ pub fn max_multiplier_bp(game_id: u8, target: u64) -> Result<u64> {
         GAME_PLINKO => plinko::max_multiplier_bp(target),
         GAME_MEGAWAYS => megaways::max_multiplier_bp(target),
         GAME_WHEEL => wheel::max_multiplier_bp(target),
+        GAME_HOLD_SPIN => hold_spin::max_multiplier_bp(target),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }
@@ -73,6 +77,7 @@ pub fn evaluate(game_id: u8, randomness: &[u8; 64], amount: u64, target: u64) ->
         GAME_PLINKO => plinko::evaluate(randomness, amount, target),
         GAME_MEGAWAYS => megaways::evaluate(randomness, amount, target),
         GAME_WHEEL => wheel::evaluate(randomness, amount, target),
+        GAME_HOLD_SPIN => hold_spin::evaluate(randomness, amount, target),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }

@@ -17,6 +17,13 @@ export const DEFAULT_SCALE: WinTierScale = { big: 10, huge: 30, jackpot: 100 };
 /** Megaways: 15× is already a big win on a cascading slot; 200× is a jackpot. */
 export const MEGAWAYS_SCALE: WinTierScale = { big: 15, huge: 50, jackpot: 200 };
 
+/** Hold & Spin: coins stack up, so "big" starts at 10× and the GRAND is a jackpot. */
+export const HOLD_SPIN_SCALE: WinTierScale = {
+  big: 10,
+  huge: 50,
+  jackpot: 200,
+};
+
 export function winTier(
   multiplierBp: bigint,
   scale: WinTierScale = DEFAULT_SCALE

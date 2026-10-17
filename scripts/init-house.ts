@@ -41,6 +41,7 @@ const GAME_LIMITS: { id: number; name: string; min: bigint; max: bigint }[] = [
   // limits bets on a small devnet treasury; the UI shows the live cap.
   { id: GAMES.MEGAWAYS, name: "megaways", min: 1n, max: 100n },
   { id: GAMES.WHEEL, name: "wheel", min: 1n, max: 1_000n },
+  { id: GAMES.HOLD_SPIN, name: "hold-spin", min: 1n, max: 100n },
 ];
 
 const bundle = createRpcBundle(rpcUrl());

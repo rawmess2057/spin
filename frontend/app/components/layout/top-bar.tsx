@@ -12,6 +12,7 @@ const NAV_LINKS = [
   { href: "/plinko", label: "Plinko" },
   { href: "/megaways", label: "Megaways" },
   { href: "/wheel", label: "Wheel" },
+  { href: "/hold-spin", label: "Vault" },
 ];
 
 export function TopBar() {

@@ -17,6 +17,7 @@ import {
 } from "../app/lib/solana/games/plinko";
 import { megawaysEval } from "../app/lib/solana/games/megaways";
 import { wheelEval } from "../app/lib/solana/games/wheel";
+import { holdSpinEval } from "../app/lib/solana/games/hold-spin";
 
 const outDir = fileURLToPath(
   new URL("../../programs/spin/tests/fixtures/", import.meta.url)
@@ -103,4 +104,29 @@ function seed(game: string, i: number): Uint8Array {
   }
   writeFileSync(`${outDir}wheel.txt`, lines.join("\n") + "\n");
   console.log(`wheel.txt: ${lines.length} vectors`);
+}
+
+// --- Hold & Spin: 60 ordinary seeds + the 6 with the most respins of 20,000 --
+// line: <seed hex> <total win bp> <rng blocks> <bonus respins> <payout for 1 SOL>
+{
+  const BET = 1_000_000_000n;
+  const lines: string[] = [];
+  const row = (s: Uint8Array) => {
+    const o = holdSpinEval(s, BET, 0n);
+    return `${hex(s)} ${o.totalWinBp} ${o.rngBlocksUsed} ${o.bonus?.respins.length ?? 0} ${o.payout}`;
+  };
+  for (let i = 0; i < 60; i++) lines.push(row(seed("holdspin", i)));
+  const heavy: { n: number; s: Uint8Array }[] = [];
+  for (let i = 1000; i < 21_000; i++) {
+    const s = seed("holdspin", i);
+    const o = holdSpinEval(s, BET, 0n);
+    heavy.push({ n: o.rngBlocksUsed, s });
+    heavy.sort((a, b) => b.n - a.n);
+    if (heavy.length > 6) heavy.pop();
+  }
+  for (const h of heavy) lines.push(row(h.s));
+  writeFileSync(`${outDir}holdspin.txt`, lines.join("\n") + "\n");
+  console.log(
+    `holdspin.txt: ${lines.length} vectors (heaviest ${heavy[0].n} blocks)`
+  );
 }

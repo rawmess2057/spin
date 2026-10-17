@@ -76,3 +76,20 @@ fn wheel_matches_typescript_fixtures() {
         assert_eq!(e.payout, payout, "payout for {}", f[0]);
     }
 }
+
+#[test]
+fn hold_spin_matches_typescript_fixtures() {
+    let rows = lines("holdspin.txt");
+    assert!(rows.len() >= 66);
+    for f in rows {
+        let seed = hex64(&f[0]);
+        let total: u64 = f[1].parse().unwrap();
+        let blocks: u32 = f[2].parse().unwrap();
+        let payout: u64 = f[4].parse().unwrap();
+        let (got_total, got_blocks) = games::hold_spin::total_win_bp(&seed);
+        assert_eq!(got_total, total, "total win for {}", f[0]);
+        assert_eq!(got_blocks, blocks, "rng blocks for {}", f[0]);
+        let e = games::evaluate(GAME_HOLD_SPIN, &seed, 1_000_000_000, 0).unwrap();
+        assert_eq!(e.payout, payout, "payout for {}", f[0]);
+    }
+}

@@ -72,7 +72,7 @@ export function MegawaysCard() {
               href="/megaways"
               className="font-contrail rounded-sm bg-gold px-8 py-3 text-sm uppercase tracking-wide text-gold-foreground shadow-[0_0_24px_rgba(255,215,0,0.4)] transition hover:brightness-110 hover:shadow-[0_0_36px_rgba(255,215,0,0.6)]"
             >
-              Play demo
+              Play now
             </Link>
             <span className="font-display text-xs uppercase tracking-[0.25em] text-muted">
               Cascades · Free spins · 10,000× max
