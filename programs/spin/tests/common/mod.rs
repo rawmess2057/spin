@@ -78,7 +78,7 @@ impl Harness {
 
         let authority = Keypair::new();
         let cranker = Keypair::new();
-        svm.airdrop(&authority.pubkey(), 1_000 * SOL).unwrap();
+        svm.airdrop(&authority.pubkey(), (treasury_sol + 100) * SOL).unwrap();
         svm.airdrop(&cranker.pubkey(), 10 * SOL).unwrap();
 
         let chain_len = 64u64;
@@ -318,6 +318,38 @@ impl Harness {
     }
 
     pub fn settle_bet(&mut self, player: Pubkey, reveal: [u8; 32]) -> TxResult {
+        self.settle_bet_with_cu(player, reveal, None)
+    }
+
+    /// Like the crank: optionally requests a compute-unit limit first.
+    pub fn settle_bet_with_cu(
+        &mut self,
+        player: Pubkey,
+        reveal: [u8; 32],
+        cu_limit: Option<u32>,
+    ) -> TxResult {
+        let cranker = pk(&self.cranker.pubkey());
+        let mut ixs = Vec::new();
+        if let Some(units) = cu_limit {
+            ixs.push(compute_unit_limit_ix(units));
+        }
+        ixs.push(ix(
+            spin::accounts::SettleBet {
+                cranker,
+                player,
+                bet: bet_address(&player),
+                chain: chain_address(),
+                vault: player_vault_address(&player),
+                credits: credits_address(),
+                session: player_session_address(&player),
+            },
+            spin::instruction::SettleBet { reveal },
+        ));
+        send_tx(&mut self.svm, &ixs, &[&self.cranker])
+    }
+
+    #[allow(dead_code)]
+    fn settle_bet_old(&mut self, player: Pubkey, reveal: [u8; 32]) -> TxResult {
         let cranker = pk(&self.cranker.pubkey());
         send_tx(&mut self.svm, 
             &[ix(
@@ -411,6 +443,17 @@ pub fn send_tx(svm: &mut LiteSVM, ixs: &[Instruction], signers: &[&Keypair]) -> 
     let r = svm.send_transaction(tx);
     svm.expire_blockhash();
     r
+}
+
+/// `ComputeBudget111…` SetComputeUnitLimit(units).
+pub fn compute_unit_limit_ix(units: u32) -> Instruction {
+    let mut data = vec![2u8];
+    data.extend_from_slice(&units.to_le_bytes());
+    Instruction {
+        program_id: Pubkey::from_str_const("ComputeBudget111111111111111111111111111111"),
+        accounts: vec![],
+        data,
+    }
 }
 
 pub fn ix<A: ToAccountMetas, D: InstructionData>(accounts: A, data: D) -> Instruction {

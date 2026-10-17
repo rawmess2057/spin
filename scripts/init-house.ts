@@ -37,6 +37,9 @@ import { createRpcBundle } from "./lib/util.js";
  */
 const GAME_LIMITS: { id: number; name: string; min: bigint; max: bigint }[] = [
   { id: GAMES.PLINKO, name: "plinko", min: 1n, max: 100n },
+  // Megaways caps at 10,000×, so the bankroll guard (not this max) is what
+  // limits bets on a small devnet treasury; the UI shows the live cap.
+  { id: GAMES.MEGAWAYS, name: "megaways", min: 1n, max: 100n },
 ];
 
 const bundle = createRpcBundle(rpcUrl());

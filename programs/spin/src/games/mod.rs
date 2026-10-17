@@ -9,6 +9,7 @@ use solana_sha256_hasher::{hash, hashv};
 use crate::constants::*;
 use crate::error::SpinError;
 
+pub mod megaways;
 pub mod plinko;
 
 /// Result of evaluating one bet.
@@ -37,6 +38,7 @@ pub fn payout(amount: u64, multiplier_bp: u64) -> Result<u64> {
 pub fn validate_target(game_id: u8, target: u64) -> Result<()> {
     match game_id {
         GAME_PLINKO => plinko::validate_target(target),
+        GAME_MEGAWAYS => megaways::validate_target(target),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }
@@ -46,6 +48,7 @@ pub fn validate_target(game_id: u8, target: u64) -> Result<()> {
 pub fn default_target(game_id: u8) -> Result<u64> {
     match game_id {
         GAME_PLINKO => Ok(plinko::encode_target(plinko::MIN_ROWS, plinko::RISK_LOW)),
+        GAME_MEGAWAYS => Ok(0),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }
@@ -56,6 +59,7 @@ pub fn default_target(game_id: u8) -> Result<u64> {
 pub fn max_multiplier_bp(game_id: u8, target: u64) -> Result<u64> {
     match game_id {
         GAME_PLINKO => plinko::max_multiplier_bp(target),
+        GAME_MEGAWAYS => megaways::max_multiplier_bp(target),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }
@@ -63,6 +67,7 @@ pub fn max_multiplier_bp(game_id: u8, target: u64) -> Result<u64> {
 pub fn evaluate(game_id: u8, randomness: &[u8; 64], amount: u64, target: u64) -> Result<Eval> {
     match game_id {
         GAME_PLINKO => plinko::evaluate(randomness, amount, target),
+        GAME_MEGAWAYS => megaways::evaluate(randomness, amount, target),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }

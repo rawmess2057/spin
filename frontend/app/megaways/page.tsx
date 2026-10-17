@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import { useDemoSpin } from "../lib/hooks/use-demo-spin";
+import { useVaultSpin } from "../lib/hooks/use-vault-spin";
 import { usePersistedFlag } from "../lib/hooks/use-persisted-flag";
 import {
   bigWinFanfare,
@@ -18,11 +19,14 @@ import {
   win,
 } from "../lib/sound/events";
 import {
+  GAME_MEGAWAYS,
+  MAX_WIN_BP,
   megawaysEval,
   megawaysPayout,
   type MegawaysOutcome,
 } from "../lib/solana/games/megaways";
 import { diamondString, lamportsToDiamonds } from "../lib/diamonds";
+import { FairPanel } from "../components/fairness/fair-panel";
 import { WIN_TIER_LABEL, type WinTier } from "../lib/win-tiers";
 import { hexToBytes } from "../lib/solana/fairness";
 import { MegawaysControls } from "../components/megaways/megaways-controls";
@@ -91,6 +95,7 @@ function readDebugSeed(): ((r: Uint8Array, bet: bigint) => Uint8Array) | null {
 export default function MegawaysPage() {
   const boardRef = useRef<MegawaysBoardHandle | null>(null);
   const [turbo, setTurbo] = usePersistedFlag(TURBO_KEY);
+  const [fairOpen, setFairOpen] = useState(false);
   const [paytableOpen, setPaytableOpen] = useState(false);
   const [animating, setAnimating] = useState(false);
   const [heldPayout, setHeldPayout] = useState<bigint | null>(null);
@@ -211,10 +216,15 @@ export default function MegawaysPage() {
     callbacksRef.current = callbacks;
   }, [callbacks]);
 
-  const spin = useDemoSpin<MegawaysOutcome>({
-    evaluate: (randomness, bet) => {
-      const seed = debugSeed.current?.(randomness, bet) ?? randomness;
-      const outcome = megawaysEval(seed, bet, 0n);
+  // On-chain randomness is fixed by the house's reveal, so the dev-only
+  // debug seed may only rewrite demo spins.
+  const connectedRef = useRef(false);
+  const evaluate = useCallback(
+    (randomness: Uint8Array, bet: bigint, target: bigint) => {
+      const seed = connectedRef.current
+        ? randomness
+        : (debugSeed.current?.(randomness, bet) ?? randomness);
+      const outcome = megawaysEval(seed, bet, target);
       betRef.current = bet;
       // The hook credits the payout right away; hide it until the reels have
       // shown it, so the balance jumps when the win lands on screen.
@@ -224,8 +234,20 @@ export default function MegawaysPage() {
       );
       return outcome;
     },
+    []
+  );
+
+  // On-chain when a wallet is connected, practice chips otherwise. Both hooks
+  // always run (hook order); the page reads from whichever applies.
+  const vaultSpin = useVaultSpin<MegawaysOutcome>({
+    gameId: GAME_MEGAWAYS,
+    evaluate,
+    maxMultiplierBp: () => MAX_WIN_BP,
     minSpinMs: 700,
   });
+  const demoSpin = useDemoSpin<MegawaysOutcome>({ evaluate, minSpinMs: 700 });
+  const spin = vaultSpin.connected ? vaultSpin : demoSpin;
+  connectedRef.current = vaultSpin.connected != null;
 
   // Wrap the surface so the controls see "rolling" for the whole animation
   // (auto-spin must not fire mid-cascade) and a balance without the held win.
@@ -271,10 +293,20 @@ export default function MegawaysPage() {
                 Megaways · up to 117,649 ways
               </span>
             </div>
-            <span className="flex items-center gap-1.5 rounded-full border border-border-low bg-cream/40 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-muted">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold shadow-[0_0_6px_#ffd700]" />
-              Demo
-            </span>
+            <button
+              type="button"
+              onClick={() => setFairOpen(true)}
+              className="flex cursor-pointer items-center gap-1.5 rounded-full border border-border-low bg-cream/40 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-muted transition hover:bg-cream hover:text-foreground"
+            >
+              <span
+                className={`h-1.5 w-1.5 animate-pulse rounded-full ${
+                  vaultSpin.connected
+                    ? "bg-primary shadow-[0_0_6px_#00ffa3]"
+                    : "bg-gold shadow-[0_0_6px_#ffd700]"
+                }`}
+              />
+              {vaultSpin.connected ? "Provably fair" : "Demo"}
+            </button>
           </header>
 
           <div
@@ -392,6 +424,15 @@ export default function MegawaysPage() {
       <MegawaysPaytable
         open={paytableOpen}
         onClose={() => setPaytableOpen(false)}
+      />
+
+      <FairPanel
+        open={fairOpen}
+        onClose={() => setFairOpen(false)}
+        chain={vaultSpin.chain.data}
+        bet={vaultSpin.lastBet}
+        demo={!vaultSpin.connected}
+        evaluatePayout={(r, bet, target) => megawaysEval(r, bet, target).payout}
       />
 
       {celebration != null && (
