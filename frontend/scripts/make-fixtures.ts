@@ -16,6 +16,7 @@ import {
   type PlinkoRisk,
 } from "../app/lib/solana/games/plinko";
 import { megawaysEval } from "../app/lib/solana/games/megaways";
+import { wheelEval } from "../app/lib/solana/games/wheel";
 
 const outDir = fileURLToPath(
   new URL("../../programs/spin/tests/fixtures/", import.meta.url)
@@ -83,4 +84,23 @@ function seed(game: string, i: number): Uint8Array {
   console.log(
     `megaways.txt: ${lines.length} vectors (heaviest ${heavy[0].blocks} blocks)`
   );
+}
+
+// --- Wheel: 3 variants × 20 seeds -------------------------------------------
+// line: <seed hex> <target> <segment> <multiplier bp> <payout for 1 SOL>
+{
+  const BET = 1_000_000_000n;
+  const lines: string[] = [];
+  let i = 0;
+  for (const target of [0n, 1n, 2n]) {
+    for (let k = 0; k < 20; k++) {
+      const s = seed("wheel", i++);
+      const o = wheelEval(s, BET, target);
+      lines.push(
+        `${hex(s)} ${target} ${o.segment} ${o.multiplierBp} ${o.payout}`
+      );
+    }
+  }
+  writeFileSync(`${outDir}wheel.txt`, lines.join("\n") + "\n");
+  console.log(`wheel.txt: ${lines.length} vectors`);
 }

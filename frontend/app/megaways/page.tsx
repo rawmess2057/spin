@@ -247,7 +247,10 @@ export default function MegawaysPage() {
   });
   const demoSpin = useDemoSpin<MegawaysOutcome>({ evaluate, minSpinMs: 700 });
   const spin = vaultSpin.connected ? vaultSpin : demoSpin;
-  connectedRef.current = vaultSpin.connected != null;
+  const isConnected = vaultSpin.connected != null;
+  useEffect(() => {
+    connectedRef.current = isConnected;
+  }, [isConnected]);
 
   // Wrap the surface so the controls see "rolling" for the whole animation
   // (auto-spin must not fire mid-cascade) and a balance without the held win.

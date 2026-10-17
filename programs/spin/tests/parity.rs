@@ -59,3 +59,20 @@ fn megaways_matches_typescript_fixtures() {
     }
     println!("heaviest fixture: {max_blocks} rng blocks");
 }
+
+#[test]
+fn wheel_matches_typescript_fixtures() {
+    let rows = lines("wheel.txt");
+    assert_eq!(rows.len(), 60);
+    for f in rows {
+        let seed = hex64(&f[0]);
+        let target: u64 = f[1].parse().unwrap();
+        let segment: u64 = f[2].parse().unwrap();
+        let mult: u64 = f[3].parse().unwrap();
+        let payout: u64 = f[4].parse().unwrap();
+        let e = games::evaluate(GAME_WHEEL, &seed, 1_000_000_000, target).unwrap();
+        assert_eq!(e.roll, segment, "segment for {}", f[0]);
+        assert_eq!(e.multiplier_bp, mult, "multiplier for {}", f[0]);
+        assert_eq!(e.payout, payout, "payout for {}", f[0]);
+    }
+}

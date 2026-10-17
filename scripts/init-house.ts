@@ -40,6 +40,7 @@ const GAME_LIMITS: { id: number; name: string; min: bigint; max: bigint }[] = [
   // Megaways caps at 10,000×, so the bankroll guard (not this max) is what
   // limits bets on a small devnet treasury; the UI shows the live cap.
   { id: GAMES.MEGAWAYS, name: "megaways", min: 1n, max: 100n },
+  { id: GAMES.WHEEL, name: "wheel", min: 1n, max: 1_000n },
 ];
 
 const bundle = createRpcBundle(rpcUrl());

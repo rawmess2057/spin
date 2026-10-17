@@ -11,6 +11,7 @@ use crate::error::SpinError;
 
 pub mod megaways;
 pub mod plinko;
+pub mod wheel;
 
 /// Result of evaluating one bet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,6 +40,7 @@ pub fn validate_target(game_id: u8, target: u64) -> Result<()> {
     match game_id {
         GAME_PLINKO => plinko::validate_target(target),
         GAME_MEGAWAYS => megaways::validate_target(target),
+        GAME_WHEEL => wheel::validate_target(target),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }
@@ -49,6 +51,7 @@ pub fn default_target(game_id: u8) -> Result<u64> {
     match game_id {
         GAME_PLINKO => Ok(plinko::encode_target(plinko::MIN_ROWS, plinko::RISK_LOW)),
         GAME_MEGAWAYS => Ok(0),
+        GAME_WHEEL => Ok(wheel::RISK_LOW),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }
@@ -60,6 +63,7 @@ pub fn max_multiplier_bp(game_id: u8, target: u64) -> Result<u64> {
     match game_id {
         GAME_PLINKO => plinko::max_multiplier_bp(target),
         GAME_MEGAWAYS => megaways::max_multiplier_bp(target),
+        GAME_WHEEL => wheel::max_multiplier_bp(target),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }
@@ -68,6 +72,7 @@ pub fn evaluate(game_id: u8, randomness: &[u8; 64], amount: u64, target: u64) ->
     match game_id {
         GAME_PLINKO => plinko::evaluate(randomness, amount, target),
         GAME_MEGAWAYS => megaways::evaluate(randomness, amount, target),
+        GAME_WHEEL => wheel::evaluate(randomness, amount, target),
         _ => Err(SpinError::UnknownGame.into()),
     }
 }

@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/plinko", label: "Plinko" },
   { href: "/megaways", label: "Megaways" },
+  { href: "/wheel", label: "Wheel" },
 ];
 
 export function TopBar() {

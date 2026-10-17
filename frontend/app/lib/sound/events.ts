@@ -250,3 +250,8 @@ export function freeSpinsTrigger(): void {
   }
   haptic("heavy");
 }
+
+/** Pointer flicking past a wheel segment: a short, bright click. */
+export function wheelTick(): void {
+  tone(1800, 0.014, 0.001, 0.03, 0, "square");
+}
