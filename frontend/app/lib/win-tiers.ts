@@ -1,16 +1,31 @@
-// Big-win celebration tiers, rescaled to Lucky Sevens' real 100x hard cap
-// (programs/spin/src/constants.rs SLOTS_MAX_MULTIPLIER_BP). The written
-// design plan's "Mega Win" (500-1000x) tier is unreachable on this program
-// and is dropped rather than faked — but the 100x cap itself gets its own
-// "JACKPOT" tier so the hardest hit on the machine reads as one.
+// Big-win celebration tiers. Thresholds are per game: Plinko's High risk tops
+// out near 920x at 16 rows (programs/spin/src/constants.rs), so 100x is a
+// "jackpot" there, while Megaways runs to 10,000x and its tiers sit higher.
+// Multipliers are in basis points.
 export type WinTier = "none" | "nice" | "big" | "huge" | "jackpot";
 
-export function winTier(multiplierBp: bigint): WinTier {
+export type WinTierScale = {
+  /** Multiplier (×) at or above which a win is "big" / "huge" / "jackpot". */
+  big: number;
+  huge: number;
+  jackpot: number;
+};
+
+/** Original Lucky Sevens / Plinko thresholds. */
+export const DEFAULT_SCALE: WinTierScale = { big: 10, huge: 30, jackpot: 100 };
+
+/** Megaways: 15× is already a big win on a cascading slot; 200× is a jackpot. */
+export const MEGAWAYS_SCALE: WinTierScale = { big: 15, huge: 50, jackpot: 200 };
+
+export function winTier(
+  multiplierBp: bigint,
+  scale: WinTierScale = DEFAULT_SCALE
+): WinTier {
   const mult = Number(multiplierBp) / 10_000;
   if (mult <= 0) return "none";
-  if (mult >= 100) return "jackpot";
-  if (mult < 10) return "nice";
-  if (mult < 30) return "big";
+  if (mult >= scale.jackpot) return "jackpot";
+  if (mult < scale.big) return "nice";
+  if (mult < scale.huge) return "big";
   return "huge";
 }
 

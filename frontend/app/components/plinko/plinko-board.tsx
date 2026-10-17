@@ -70,6 +70,25 @@ export const PlinkoBoard = forwardRef<PlinkoBoardHandle, Props>(
     const configRef = useRef(config);
     configRef.current = config;
     const bounceBucketRef = useRef<(i: number) => void>(() => {});
+    const boardRef = useRef<Container | null>(null);
+
+    /** Scales and centres the board container to the current canvas size. */
+    function fitBoard(app: Application) {
+      const board = boardRef.current;
+      if (!board || board.destroyed) return;
+      const rows = configRef.current.rows;
+      // Fill the host on both axes so the board scales up to use the available
+      // width — the main driver of the "wide" layout.
+      const fitScale = Math.min(
+        (app.screen.width - 32) / (boardWidth(rows) + 32),
+        (app.screen.height - 24) / (boardHeight(rows) + 24)
+      );
+      board.scale.set(fitScale);
+      board.position.set(
+        app.screen.width / 2,
+        app.screen.height / 2 - (boardHeight(rows) / 2) * fitScale
+      );
+    }
 
     // Establish the renderer once.
     useEffect(() => {
@@ -94,15 +113,22 @@ export const PlinkoBoard = forwardRef<PlinkoBoardHandle, Props>(
           appRef.current = app;
           hostRef.current?.appendChild(app.canvas);
           rebuildBoard(app);
+          // `resizeTo` resizes the canvas; the board itself must be re-fit.
+          app.renderer.on("resize", onResize);
         });
+
+      const onResize = () => fitBoard(app);
 
       return () => {
         destroyed = true;
         appRef.current = null;
+        boardRef.current = null;
         if (initialized) {
+          app.renderer.off("resize", onResize);
           app.destroy(true);
         }
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Rebuild the peg grid + buckets whenever rows or risk changes (risk
@@ -111,6 +137,7 @@ export const PlinkoBoard = forwardRef<PlinkoBoardHandle, Props>(
       if (appRef.current) {
         rebuildBoard(appRef.current);
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [config.rows, config.risk]);
 
     function rebuildBoard(app: Application) {
@@ -122,17 +149,8 @@ export const PlinkoBoard = forwardRef<PlinkoBoardHandle, Props>(
       for (const c of last) c.destroy();
 
       const board = new Container();
-      // Fill the host on both axes so the board scales up to use the available
-      // width — the main driver of the "wide" layout.
-      const fitScale = Math.min(
-        (app.screen.width - 32) / (boardWidth(rows) + 32),
-        (app.screen.height - 24) / (boardHeight(rows) + 24)
-      );
-      board.scale.set(fitScale);
-      board.position.set(
-        app.screen.width / 2,
-        app.screen.height / 2 - (boardHeight(rows) / 2) * fitScale
-      );
+      boardRef.current = board;
+      fitBoard(app);
       app.stage.addChild(board);
 
       const palette = plinkoPalette(rows);
@@ -354,20 +372,24 @@ export const PlinkoBoard = forwardRef<PlinkoBoardHandle, Props>(
           // each peg the ball touches, finally landing in the winning bucket.
           const kf: { x: number; y: number }[] = [];
           kf.push({ x: 0, y: 0 });
+          // In a Galton board the ball that has bounced right `k` times so
+          // far lands on peg column `k` of the next row, then leaves it on
+          // the side it bounces toward. Using the count *before* this row's
+          // step keeps every contact inside the peg triangle.
           let rights = 0;
           const path = outcome.path;
+          const clearance = BALL_RADIUS + PEG_RADIUS;
           for (let i = 0; i < path.length; i++) {
-            if (path[i] === "R") rights++;
             const peg = pegPosition(rows, i, rights);
-            const clearance = BALL_RADIUS + PEG_RADIUS;
-            const contactX =
-              path[i] === "R"
-                ? peg.x - clearance * 0.7
-                : peg.x + clearance * 0.7;
+            const goesRight = path[i] === "R";
+            const contactX = goesRight
+              ? peg.x + clearance * 0.7
+              : peg.x - clearance * 0.7;
             kf.push({
               x: contactX,
               y: TOP_PAD + peg.y - clearance * 0.7,
             });
+            if (goesRight) rights++;
           }
           // Final drop into the winning bucket: seat the ball inside the
           // chip, its base just above the chip's bottom edge.

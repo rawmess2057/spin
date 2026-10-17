@@ -730,8 +730,13 @@ mod tests {
         assert_eq!(plinko_multiplier_bp(17, PLINKO_RISK_LOW, 0), 0);
         assert_eq!(plinko_multiplier_bp(12, PLINKO_RISK_LOW, 13), 0);
         // Buckets are in 0.01x increments => multiples of 100 bp.
-        assert_eq!(plinko_multiplier_bp(8, PLINKO_RISK_LOW, 0), 281_600);
-        assert_eq!(plinko_multiplier_bp(8, PLINKO_RISK_LOW, 4), 4_000); // 40x -> 0.40x
+        assert_eq!(plinko_multiplier_bp(8, PLINKO_RISK_LOW, 0), 50400);
+        assert_eq!(plinko_multiplier_bp(8, PLINKO_RISK_LOW, 4), 7400); // centre bucket
+        // Risk is volatility, not RTP: higher risk pays more at the edge and
+        // less in the centre.
+        assert!(plinko_multiplier_bp(16, PLINKO_RISK_HIGH, 0) > plinko_multiplier_bp(16, PLINKO_RISK_MED, 0));
+        assert!(plinko_multiplier_bp(16, PLINKO_RISK_MED, 0) > plinko_multiplier_bp(16, PLINKO_RISK_LOW, 0));
+        assert!(plinko_multiplier_bp(16, PLINKO_RISK_HIGH, 8) < plinko_multiplier_bp(16, PLINKO_RISK_LOW, 8));
     }
 
     #[test]

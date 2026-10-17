@@ -11,7 +11,9 @@ import {
   defaultBet,
 } from "../../lib/diamonds";
 import { haptic } from "../../lib/sound/events";
+import type { SpinSurface } from "../../lib/hooks/use-demo-spin";
 import { Card } from "../ui/card";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { RiskSelector } from "./plinko-risk-selector";
 import { RowSelector } from "./plinko-row-selector";
@@ -20,23 +22,10 @@ import {
   plinkoEncodeTarget,
 } from "../../lib/solana/games/plinko";
 
-type SpinSurface = {
-  balance: bigint | null;
-  minBet: bigint | null;
-  maxBet: bigint | null;
-  isSending: boolean;
-  rolling: boolean;
-  sessionReady: boolean;
-  spendLeft: bigint;
-  betErrors: (lamports: bigint | null) => string[];
-  placeBet: (lamports: bigint, target: bigint) => Promise<boolean>;
-  reset: () => void;
-};
-
 type Props = {
   config: PlinkoConfig;
   onConfigChange: (config: PlinkoConfig) => void;
-  spin: SpinSurface;
+  spin: SpinSurface & { isDemo?: boolean; refill?: () => void };
 };
 
 function FieldLabel({ children }: { children: ReactNode }) {
@@ -186,12 +175,33 @@ export function PlinkoControls({ config, onConfigChange, spin }: Props) {
       {/* Bet amount ------------------------------------------------------- */}
       <div className="flex items-baseline justify-between">
         <FieldLabel>Bet amount</FieldLabel>
-        <div className="mb-1.5 flex items-baseline gap-1 text-[11px] font-semibold text-muted">
-          Balance
-          <span className="font-mono text-xs font-bold text-foreground">
-            {balanceLabel}
+        <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold text-muted">
+          {spin.isDemo && (
+            <span className="flex items-center gap-1.5">
+              <Badge tone="gold">Demo</Badge>
+              {spin.refill && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    spin.refill?.();
+                    haptic("light");
+                    toast.success("Demo balance refilled");
+                  }}
+                  disabled={busy}
+                  className="cursor-pointer rounded-md border border-border-low px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted transition hover:bg-cream hover:text-foreground disabled:opacity-40"
+                >
+                  Refill
+                </button>
+              )}
+            </span>
+          )}
+          <span className="flex items-baseline gap-1">
+            Balance
+            <span className="font-mono text-xs font-bold text-foreground">
+              {balanceLabel}
+            </span>
+            <span className="text-[11px]">💎</span>
           </span>
-          <span className="text-[11px]">💎</span>
         </div>
       </div>
 
@@ -267,6 +277,7 @@ export function PlinkoControls({ config, onConfigChange, spin }: Props) {
         <RiskSelector
           value={config.risk}
           onChange={(risk) => onConfigChange({ ...config, risk })}
+          disabled={busy}
         />
       </div>
 
@@ -275,6 +286,7 @@ export function PlinkoControls({ config, onConfigChange, spin }: Props) {
         <RowSelector
           value={config.rows}
           onChange={(rows) => onConfigChange({ ...config, rows })}
+          disabled={busy}
         />
       </div>
 
@@ -287,9 +299,11 @@ export function PlinkoControls({ config, onConfigChange, spin }: Props) {
         {betButtonLabel}
       </Button>
       <p className="mt-1.5 text-center text-[11px] leading-snug text-muted-foreground">
-        {busy
-          ? "Settling your drop on-chain — hang tight."
-          : "Every drop is settled on-chain from a provably fair reveal."}
+        {spin.isDemo
+          ? "Demo mode — connect a wallet and buy chips to play for real."
+          : busy
+            ? "Settling your drop on-chain — hang tight."
+            : "Every drop is settled on-chain from a provably fair reveal."}
       </p>
 
       {/* Auto play -------------------------------------------------------- */}

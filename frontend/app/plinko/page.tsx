@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useVaultSpin } from "../lib/hooks/use-vault-spin";
-import { win as winSound, lose as loseSound } from "../lib/sound/events";
+import { useDemoSpin } from "../lib/hooks/use-demo-spin";
+import {
+  win as winSound,
+  lose as loseSound,
+  bigWinFanfare,
+} from "../lib/sound/events";
+import { winTier } from "../lib/win-tiers";
 import {
   GAME_PLINKO,
   PLINKO_RISK,
@@ -12,7 +18,11 @@ import {
   type PlinkoOutcome,
   plinkoEval,
 } from "../lib/solana/games/plinko";
-import { diamondString, lamportsToDiamonds } from "../lib/diamonds";
+import {
+  diamondString,
+  diamondsToLamports,
+  lamportsToDiamonds,
+} from "../lib/diamonds";
 import { PlinkoControls } from "../components/plinko/plinko-controls";
 import {
   PlinkoHistory,
@@ -65,20 +75,17 @@ export default function PlinkoPage() {
 
   // Called once the ball visually lands in its bucket: celebrate + announce.
   const handleLanded = useCallback((outcome: PlinkoOutcome, bet: bigint) => {
-    const multiplier = Number(outcome.multiplierBp) / 10000;
     if (outcome.payout >= bet) winSound(outcome.multiplierBp);
     else loseSound();
 
-    if (multiplier >= 25) {
-      setCelebration((p) => ({
-        mode: "coins",
-        id: (p?.id ?? 0) + 1,
-      }));
-    } else if (multiplier >= 10) {
-      setCelebration((p) => ({
-        mode: "confetti",
-        id: (p?.id ?? 0) + 1,
-      }));
+    // Shared celebration tiers (lib/win-tiers.ts): confetti for a big win,
+    // coins + fanfare above that.
+    const tier = winTier(outcome.multiplierBp);
+    if (tier === "big") {
+      setCelebration((p) => ({ mode: "confetti", id: (p?.id ?? 0) + 1 }));
+    } else if (tier === "huge" || tier === "jackpot") {
+      bigWinFanfare(tier);
+      setCelebration((p) => ({ mode: "coins", id: (p?.id ?? 0) + 1 }));
     }
 
     if (landTimer.current != null) clearTimeout(landTimer.current);
@@ -99,24 +106,35 @@ export default function PlinkoPage() {
 
   // The spinner held outcome is resolved after the minimum spin duration; we
   // immediately hand it to the board to animate the deterministic path.
-  const spin = useVaultSpin<PlinkoOutcome>({
+  const evaluate = useCallback((randomness: Uint8Array, bet: bigint) => {
+    const outcome = plinkoEval(randomness, bet, configRef.current);
+    // Trigger the board animation before the hook releases the outcome to
+    // the controls, so the reveal and the drop start together. Hide any
+    // previous result chip as the next ball begins its run.
+    if (landTimer.current != null) clearTimeout(landTimer.current);
+    setLanded(null);
+    queueMicrotask(() =>
+      boardRef.current?.dropBall(outcome, (o) =>
+        handleLandedRef.current(o, bet)
+      )
+    );
+    return outcome;
+  }, []);
+
+  // On-chain when a wallet is connected, practice diamonds otherwise. Both
+  // hooks always run (hook order), and the page reads from whichever applies.
+  const vaultSpin = useVaultSpin<PlinkoOutcome>({
     gameId: GAME_PLINKO,
-    evaluate: (randomness, bet) => {
-      const outcome = plinkoEval(randomness, bet, configRef.current);
-      // Trigger the board animation before the hook releases the outcome to
-      // the controls, so the reveal and the drop start together. Hide any
-      // previous result chip as the next ball begins its run.
-      if (landTimer.current != null) clearTimeout(landTimer.current);
-      setLanded(null);
-      queueMicrotask(() =>
-        boardRef.current?.dropBall(outcome, (o) =>
-          handleLandedRef.current(o, bet)
-        )
-      );
-      return outcome;
-    },
+    evaluate,
     minSpinMs: 2200,
   });
+  const demoSpin = useDemoSpin<PlinkoOutcome>({
+    evaluate,
+    minSpinMs: 1500,
+    minBet: diamondsToLamports(1n),
+    maxBet: diamondsToLamports(1_000n),
+  });
+  const spin = vaultSpin.connected ? vaultSpin : demoSpin;
 
   // Record each newly resolved spin into the recent-drops history. We compare
   // by object identity because the hook creates a fresh outcome per spin.
