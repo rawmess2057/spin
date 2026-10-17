@@ -9,6 +9,7 @@ import { SoundToggle } from "../sound-toggle";
 const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/plinko", label: "Plinko" },
+  { href: "/megaways", label: "Megaways" },
 ];
 
 export function TopBar() {

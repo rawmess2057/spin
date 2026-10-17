@@ -19,7 +19,9 @@ export function CountUp({
     const start = performance.now();
     const from = 0;
     const frame = (t: number) => {
-      const p = Math.min((t - start) / durationMs, 1);
+      // rAF timestamps can precede the effect's `performance.now()` by a
+      // frame, so clamp from below too or the first frame shows a negative.
+      const p = Math.min(Math.max((t - start) / durationMs, 0), 1);
       const eased = 1 - Math.pow(1 - p, 3);
       setDisplay(from + (value - from) * eased);
       if (p < 1) raf = requestAnimationFrame(frame);

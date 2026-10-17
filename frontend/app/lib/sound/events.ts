@@ -211,3 +211,42 @@ export function jackpot(): void {
   noiseBurst(0.8, 0.09);
   thump(90, 50, 0.5, 0.25, 1.5);
 }
+
+// --- Megaways cues ----------------------------------------------------------
+
+/** Winning symbols pop and the survivors tumble: a soft crunch + falling blip. */
+export function tumble(): void {
+  noiseKnock(900, 0.08, 0.16);
+  tone(520, 0.05, 0.005, 0.12, 0, "triangle");
+  tone(380, 0.05, 0.005, 0.14, 0.06, "triangle");
+}
+
+/** New symbols landing after a tumble — a soft, low thud. */
+export function symbolLand(): void {
+  thump(140, 60, 0.09, 0.14);
+}
+
+/** A scatter stops in view: bright, slightly dissonant chord that stacks up. */
+export function scatterLand(count: number): void {
+  const root = 660 + Math.min(count, 5) * 60;
+  tone(root, 0.09, 0.01, 0.35, 0, "triangle");
+  tone(root * 1.5, 0.06, 0.01, 0.3, 0.02, "sine");
+  tone(root * 2.02, 0.03, 0.01, 0.25, 0.04, "sine");
+  haptic("light");
+}
+
+/** Free-spin multiplier ticks up: a ping rising a semitone per level. */
+export function multiplierUp(level: number): void {
+  const f = 880 * Math.pow(1.0595, Math.min(level, 24));
+  tone(f, 0.08, 0.005, 0.22, 0, "triangle");
+  tone(f * 2, 0.03, 0.005, 0.15, 0.01, "sine");
+}
+
+/** Free spins triggered: fanfare plus a rising siren tail. */
+export function freeSpinsTrigger(): void {
+  bigWinFanfare("big");
+  for (let i = 0; i < 6; i++) {
+    tone(440 * Math.pow(1.12, i), 0.07, 0.01, 0.2, 0.9 + i * 0.09, "sawtooth");
+  }
+  haptic("heavy");
+}
