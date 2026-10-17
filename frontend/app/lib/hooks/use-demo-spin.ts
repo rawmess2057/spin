@@ -56,8 +56,18 @@ let cached: bigint | undefined;
 const listeners = new Set<() => void>();
 function subscribe(cb: () => void) {
   listeners.add(cb);
+  // Another tab changed the balance: drop the cache so the next read
+  // re-hydrates from storage.
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY) {
+      cached = undefined;
+      cb();
+    }
+  };
+  window.addEventListener("storage", onStorage);
   return () => {
     listeners.delete(cb);
+    window.removeEventListener("storage", onStorage);
   };
 }
 function getBalance(startBalance: bigint): bigint {

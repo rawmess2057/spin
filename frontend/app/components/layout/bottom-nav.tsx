@@ -3,13 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BalancePill } from "../vault/balance-pill";
+import { GAMES } from "../../lib/games/registry";
 
 const TABS = [
   { href: "/", label: "Home", icon: "🏠" },
-  { href: "/plinko", label: "Plinko", icon: "📌" },
-  { href: "/megaways", label: "Megaways", icon: "🎰" },
-  { href: "/wheel", label: "Wheel", icon: "🎡" },
-  { href: "/hold-spin", label: "Vault", icon: "🪙" },
+  ...GAMES.map((g) => ({ href: g.href, label: g.label, icon: g.icon })),
 ];
 
 export function BottomNav() {

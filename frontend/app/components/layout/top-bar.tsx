@@ -6,13 +6,11 @@ import { ClusterSelect } from "../wallet/cluster-select";
 import { WalletButton } from "../wallet/wallet-button";
 import { SoundToggle } from "../sound-toggle";
 import { BalancePill } from "../vault/balance-pill";
+import { GAMES } from "../../lib/games/registry";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
-  { href: "/plinko", label: "Plinko" },
-  { href: "/megaways", label: "Megaways" },
-  { href: "/wheel", label: "Wheel" },
-  { href: "/hold-spin", label: "Vault" },
+  ...GAMES.map((g) => ({ href: g.href, label: g.label })),
 ];
 
 export function TopBar() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import {
   ambientStart,
   ambientStop,
@@ -8,8 +8,19 @@ import {
   setSoundMuted,
 } from "../lib/sound/events";
 
+// The mute flag lives in localStorage. Reading it in a useState initialiser
+// would make the server and client first renders disagree, so it goes
+// through an external store whose server snapshot is "not muted".
+const listeners = new Set<() => void>();
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
 export function SoundToggle() {
-  const [muted, setMuted] = useState(isSoundMuted());
+  const muted = useSyncExternalStore(subscribe, isSoundMuted, () => false);
 
   // Kick off the casino-floor ambience while the toggle is on screen. The
   // AudioContext stays suspended until the first user gesture, so the bed
@@ -24,13 +35,13 @@ export function SoundToggle() {
       type="button"
       onClick={() => {
         const next = !muted;
-        setMuted(next);
         setSoundMuted(next);
         if (next) {
           ambientStop();
         } else {
           ambientStart();
         }
+        for (const l of listeners) l();
       }}
       title={muted ? "Unmute sounds" : "Mute sounds"}
       aria-label={muted ? "Unmute sounds" : "Mute sounds"}
