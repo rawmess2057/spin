@@ -11,6 +11,7 @@ import { GAMES } from "../../lib/games/registry";
 const NAV_LINKS = [
   { href: "/", label: "Home" },
   ...GAMES.map((g) => ({ href: g.href, label: g.label })),
+  { href: "/cashier", label: "Cashier" },
 ];
 
 export function TopBar() {

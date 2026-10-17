@@ -10,9 +10,9 @@ import {
   parseDiamonds,
   defaultBet,
 } from "../../lib/diamonds";
+import Link from "next/link";
 import { haptic } from "../../lib/sound/events";
 import type { SpinSurface } from "../../lib/hooks/use-demo-spin";
-import { useBuyChips } from "../vault/buy-chips-context";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -62,7 +62,6 @@ export function BetPanel({
   footnote,
   skipSlot,
 }: Props) {
-  const buyChips = useBuyChips();
   const [input, setInput] = useState("");
   const seededDefault = useRef(false);
 
@@ -197,13 +196,12 @@ export function BetPanel({
             <span className="text-[11px]">💎</span>
           </span>
           {!spin.isDemo && (
-            <button
-              type="button"
-              onClick={() => buyChips.open("buy")}
-              className="cursor-pointer rounded-md border border-gold/50 bg-gold/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gold transition hover:bg-gold/20"
+            <Link
+              href="/cashier"
+              className="rounded-md border border-gold/50 bg-gold/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gold transition hover:bg-gold/20"
             >
-              Buy chips
-            </button>
+              Cashier
+            </Link>
           )}
         </div>
       </div>

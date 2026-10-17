@@ -53,8 +53,10 @@ cp .env.example .env.local
 npm run dev                                # http://localhost:3000
 ```
 
-Connect a wallet on devnet, press the 💎 pill to buy chips (one approval
-funds the session key, deposits and arms it), then play. The "Provably
+Connect a wallet on devnet and open the Cashier (`/cashier`, or the 💎 pill)
+to buy chips — one approval funds the session key, deposits and arms it —
+cash out, manage the session key, refund a stalled bet and see your
+on-chain activity. Then play. The "Provably
 fair" button on each game shows the commitment, client seed, reveal and a
 one-click in-browser recompute.
 
