@@ -1,6 +1,9 @@
 import { Hero } from "./components/home/hero";
 import { BonusOffers } from "./components/home/bonus-offers";
 import { PlinkoCard } from "./components/home/plinko-card";
+import { MegawaysCard } from "./components/home/megaways-card";
+import { HoldSpinCard } from "./components/home/hold-spin-card";
+import { WheelCard } from "./components/home/wheel-card";
 import { PromoBlocks } from "./components/home/promo-blocks";
 import { Features } from "./components/home/features";
 import { Faq } from "./components/home/faq";
@@ -11,7 +14,10 @@ export default function Home() {
     <main className="juwa">
       <Hero />
       <BonusOffers />
+      <MegawaysCard />
+      <HoldSpinCard />
       <PlinkoCard />
+      <WheelCard />
       <PromoBlocks />
       <Features />
       <Faq />

@@ -1,10 +1,10 @@
 /**
  * Plinko client-side evaluator.
  *
- * Mirrors the on-chain evaluator (programs/spin/src/instructions/bet.rs and
- * constants.rs) byte-for-byte so the outcome a player sees animating on the
- * board is exactly what the program settled. The path is derived directly
- * from the reveal-chain randomness; both halves read the same bits.
+ * Mirrors the on-chain evaluator (programs/spin/src/games/plinko.rs)
+ * byte-for-byte so the outcome a player sees animating on the board is
+ * exactly what the program settled. The path is derived directly from the
+ * bet's randomness; both halves read the same bits.
  */
 
 export const GAME_PLINKO = 7;
@@ -40,97 +40,97 @@ export type PlinkoOutcome = {
   path: ("L" | "R")[];
 };
 
-/** Edge-payout tables, units of 0.01× (2816 = 28.16×). Mirrors
- * `PLINKO_TABLES_0_01` in the program. Bucket k = index into row's array. */
+/** Edge-payout tables, units of 0.01× (504 = 5.04×). Mirrors
+ * `PLINKO_TABLES_0_01` in the program byte-for-byte. Every risk level targets
+ * a 97% RTP and differs only in shape: Low is flat, High is steep. Regenerate
+ * with `npx tsx scripts/plinko-calibrate.ts` (repo root). Bucket k = index. */
 const PLINKO_TABLES: Record<number, Record<PlinkoRisk, number[]>> = {
   8: {
-    [PLINKO_RISK.LOW]: [2816, 352, 101, 50, 40, 50, 101, 352, 2816],
-    [PLINKO_RISK.MED]: [2773, 347, 99, 50, 40, 50, 99, 347, 2773],
-    [PLINKO_RISK.HIGH]: [2731, 341, 98, 49, 39, 49, 98, 341, 2731],
+    [PLINKO_RISK.LOW]: [504, 198, 112, 82, 74, 82, 112, 198, 504],
+    [PLINKO_RISK.MED]: [838, 241, 113, 75, 65, 75, 113, 241, 838],
+    [PLINKO_RISK.HIGH]: [1575, 298, 110, 63, 53, 63, 110, 298, 1575],
   },
   9: {
-    [PLINKO_RISK.LOW]: [5069, 563, 141, 60, 40, 40, 60, 141, 563, 5069],
-    [PLINKO_RISK.MED]: [4992, 555, 139, 59, 40, 40, 59, 139, 555, 4992],
-    [PLINKO_RISK.HIGH]: [4915, 546, 137, 59, 39, 39, 59, 137, 546, 4915],
+    [PLINKO_RISK.LOW]: [665, 247, 133, 91, 75, 75, 91, 133, 247, 665],
+    [PLINKO_RISK.MED]: [1215, 325, 142, 85, 67, 67, 85, 142, 325, 1215],
+    [PLINKO_RISK.HIGH]: [2570, 443, 146, 74, 54, 54, 74, 146, 443, 2570],
   },
   10: {
-    [PLINKO_RISK.LOW]: [9216, 922, 205, 77, 44, 37, 44, 77, 205, 922, 9216],
-    [PLINKO_RISK.MED]: [9076, 908, 202, 76, 43, 36, 43, 76, 202, 908, 9076],
-    [PLINKO_RISK.HIGH]: [8937, 894, 199, 74, 43, 35, 43, 74, 199, 894, 8937],
+    [PLINKO_RISK.LOW]: [885, 314, 160, 103, 80, 74, 80, 103, 160, 314, 885],
+    [PLINKO_RISK.MED]: [1778, 447, 181, 101, 72, 64, 72, 101, 181, 447, 1778],
+    [PLINKO_RISK.HIGH]: [4221, 669, 201, 92, 59, 51, 59, 92, 201, 669, 4221],
   },
   11: {
     [PLINKO_RISK.LOW]: [
-      16896, 1536, 307, 102, 51, 37, 37, 51, 102, 307, 1536, 16896,
+      1184, 402, 195, 119, 87, 75, 75, 87, 119, 195, 402, 1184,
     ],
     [PLINKO_RISK.MED]: [
-      16640, 1513, 303, 101, 50, 36, 36, 50, 101, 303, 1513, 16640,
+      2602, 617, 235, 122, 80, 66, 66, 80, 122, 235, 617, 2602,
     ],
     [PLINKO_RISK.HIGH]: [
-      16384, 1489, 298, 99, 50, 35, 35, 50, 99, 298, 1489, 16384,
+      6984, 1026, 283, 118, 68, 52, 52, 68, 118, 283, 1026, 6984,
     ],
   },
   12: {
     [PLINKO_RISK.LOW]: [
-      31193, 2599, 473, 142, 63, 39, 34, 39, 63, 142, 473, 2599, 31193,
+      1583, 517, 240, 140, 97, 79, 73, 79, 97, 140, 240, 517, 1583,
     ],
     [PLINKO_RISK.MED]: [
-      30720, 2560, 465, 140, 62, 39, 33, 39, 62, 140, 465, 2560, 30720,
+      3829, 862, 310, 151, 93, 70, 64, 70, 93, 151, 310, 862, 3829,
     ],
     [PLINKO_RISK.HIGH]: [
-      30247, 2521, 458, 137, 61, 38, 33, 38, 61, 137, 458, 2521, 30247,
+      11604, 1589, 406, 155, 81, 56, 49, 56, 81, 155, 406, 1589, 11604,
     ],
   },
   13: {
     [PLINKO_RISK.LOW]: [
-      57929, 4456, 743, 203, 81, 45, 34, 34, 45, 81, 203, 743, 4456, 57929,
+      2126, 670, 299, 167, 110, 85, 74, 74, 85, 110, 167, 299, 670, 2126,
     ],
     [PLINKO_RISK.MED]: [
-      57051, 4389, 731, 199, 80, 44, 33, 33, 44, 80, 199, 731, 4389, 57051,
+      5653, 1213, 414, 190, 110, 77, 65, 65, 77, 110, 190, 414, 1213, 5653,
     ],
     [PLINKO_RISK.HIGH]: [
-      56174, 4321, 720, 196, 79, 44, 33, 33, 44, 79, 196, 720, 4321, 56174,
+      19401, 2493, 594, 210, 101, 63, 50, 50, 63, 101, 210, 594, 2493, 19401,
     ],
   },
   14: {
     [PLINKO_RISK.LOW]: [
-      108134, 7724, 1188, 297, 108, 54, 36, 32, 36, 54, 108, 297, 1188, 7724,
-      108134,
+      2847, 868, 374, 200, 127, 93, 78, 73, 78, 93, 127, 200, 374, 868, 2847,
     ],
     [PLINKO_RISK.MED]: [
-      106496, 7607, 1170, 293, 106, 53, 35, 31, 35, 53, 106, 293, 1170, 7607,
-      106496,
+      8362, 1716, 558, 243, 132, 87, 69, 63, 69, 87, 132, 243, 558, 1716, 8362,
     ],
     [PLINKO_RISK.HIGH]: [
-      104858, 7490, 1152, 288, 105, 52, 35, 31, 35, 52, 105, 288, 1152, 7490,
-      104858,
+      32420, 3926, 878, 290, 129, 74, 54, 48, 54, 74, 129, 290, 878, 3926,
+      32420,
     ],
   },
   15: {
     [PLINKO_RISK.LOW]: [
-      202752, 13517, 1931, 446, 149, 68, 41, 32, 32, 41, 68, 149, 446, 1931,
-      13517, 202752,
+      3837, 1134, 473, 244, 149, 104, 83, 74, 74, 83, 104, 149, 244, 473, 1134,
+      3837,
     ],
     [PLINKO_RISK.MED]: [
-      199680, 13312, 1902, 439, 146, 66, 40, 31, 31, 40, 66, 146, 439, 1902,
-      13312, 199680,
+      12432, 2448, 762, 316, 163, 102, 75, 64, 64, 75, 102, 163, 316, 762, 2448,
+      12432,
     ],
     [PLINKO_RISK.HIGH]: [
-      196608, 13107, 1872, 432, 144, 65, 39, 31, 31, 39, 65, 144, 432, 1872,
-      13107, 196608,
+      54608, 6257, 1319, 408, 169, 90, 60, 49, 49, 60, 90, 169, 408, 1319, 6257,
+      54608,
     ],
   },
   16: {
     [PLINKO_RISK.LOW]: [
-      381651, 23853, 3180, 682, 210, 87, 48, 33, 30, 33, 48, 87, 210, 682, 3180,
-      23853, 381651,
+      5151, 1479, 597, 299, 176, 119, 90, 77, 73, 77, 90, 119, 176, 299, 597,
+      1479, 5151,
     ],
     [PLINKO_RISK.MED]: [
-      375868, 23492, 3132, 671, 207, 86, 47, 33, 29, 33, 47, 86, 207, 671, 3132,
-      23492, 375868,
+      18386, 3484, 1040, 413, 203, 120, 84, 68, 63, 68, 84, 120, 203, 413, 1040,
+      3484, 18386,
     ],
     [PLINKO_RISK.HIGH]: [
-      370086, 23130, 3084, 661, 203, 85, 46, 32, 29, 32, 46, 85, 203, 661, 3084,
-      23130, 370086,
+      92092, 10021, 1999, 583, 227, 113, 69, 52, 47, 52, 69, 113, 227, 583,
+      1999, 10021, 92092,
     ],
   },
 };
@@ -147,6 +147,7 @@ export function plinkoEncodeTarget(config: PlinkoConfig): bigint {
 
 /** Decodes `target` into a config; null if out of range. */
 export function plinkoDecodeTarget(target: bigint): PlinkoConfig | null {
+  if (target >> 16n !== 0n) return null;
   const rows = Number((target >> 8n) & 0xffn);
   const risk = Number(target & 0xffn) as PlinkoRisk;
   if (
@@ -168,6 +169,13 @@ export function plinkoMultiplierBp(
   const table = plinkoTable(rows, risk);
   if (table == null || bucket < 0 || bucket > rows) return 0n;
   return BigInt(table[bucket]) * 100n;
+}
+
+/** The table's edge bucket is its maximum; mirrors `plinko::max_multiplier_bp`. */
+export function plinkoMaxMultiplierBp(target: bigint): bigint {
+  const cfg = plinkoDecodeTarget(target);
+  if (cfg == null) return 0n;
+  return plinkoMultiplierBp(cfg.rows, cfg.risk, 0);
 }
 
 /** Mirrors the program's integer payout (amount * bp / 10_000, truncated). */

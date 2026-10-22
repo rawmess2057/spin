@@ -16,126 +16,114 @@ import { SPIN_PROGRAM_ADDRESS } from "../programs";
 
 /** HousePaused: House is paused */
 export const SPIN_ERROR__HOUSE_PAUSED = 0x1770; // 6000
+/** GamePaused: This game is paused */
+export const SPIN_ERROR__GAME_PAUSED = 0x1771; // 6001
 /** NotAuthority: Only the house authority may perform this action */
-export const SPIN_ERROR__NOT_AUTHORITY = 0x1771; // 6001
+export const SPIN_ERROR__NOT_AUTHORITY = 0x1772; // 6002
 /** BetBelowMinimum: Bet below minimum */
-export const SPIN_ERROR__BET_BELOW_MINIMUM = 0x1772; // 6002
+export const SPIN_ERROR__BET_BELOW_MINIMUM = 0x1773; // 6003
 /** BetAboveMaximum: Bet above maximum */
-export const SPIN_ERROR__BET_ABOVE_MAXIMUM = 0x1773; // 6003
-/** BetExceedsBankrollLimit: Bet exceeds the house bankroll limit (1% of treasury) */
-export const SPIN_ERROR__BET_EXCEEDS_BANKROLL_LIMIT = 0x1774; // 6004
+export const SPIN_ERROR__BET_ABOVE_MAXIMUM = 0x1774; // 6004
+/** MaxPayoutExceedsBankroll: The bet's maximum payout exceeds what the bankroll can cover */
+export const SPIN_ERROR__MAX_PAYOUT_EXCEEDS_BANKROLL = 0x1775; // 6005
 /** TreasuryBalanceTooLow: Treasury balance is too low */
-export const SPIN_ERROR__TREASURY_BALANCE_TOO_LOW = 0x1775; // 6005
-/** TargetOutOfRange: Target out of range */
-export const SPIN_ERROR__TARGET_OUT_OF_RANGE = 0x1776; // 6006
+export const SPIN_ERROR__TREASURY_BALANCE_TOO_LOW = 0x1776; // 6006
+/** InvalidTarget: Target out of range for this game */
+export const SPIN_ERROR__INVALID_TARGET = 0x1777; // 6007
 /** UnknownGame: Unknown game */
-export const SPIN_ERROR__UNKNOWN_GAME = 0x1777; // 6007
-/** AlreadyResolved: Spin is already resolved */
-export const SPIN_ERROR__ALREADY_RESOLVED = 0x1778; // 6008
-/** SpinNotResolvable: Spin is not yet resolvable */
-export const SPIN_ERROR__SPIN_NOT_RESOLVABLE = 0x1779; // 6009
-/** RandomnessPending: Randomness request is not fulfilled yet */
-export const SPIN_ERROR__RANDOMNESS_PENDING = 0x177a; // 6010
-/** PendingMismatch: Pending account does not match the randomness request */
-export const SPIN_ERROR__PENDING_MISMATCH = 0x177b; // 6011
-/** ClientMismatch: Client PDA does not match the registered VRF client */
-export const SPIN_ERROR__CLIENT_MISMATCH = 0x177c; // 6012
-/** TreasuryMismatch: Treasury account does not match the network configuration */
-export const SPIN_ERROR__TREASURY_MISMATCH = 0x177d; // 6013
-/** RequestMismatch: Request account does not match the VRF request PDA */
-export const SPIN_ERROR__REQUEST_MISMATCH = 0x177e; // 6014
-/** NetworkStateMismatch: Network state account is invalid */
-export const SPIN_ERROR__NETWORK_STATE_MISMATCH = 0x177f; // 6015
-/** ArithmeticOverflow: Payout calculation overflow */
-export const SPIN_ERROR__ARITHMETIC_OVERFLOW = 0x1780; // 6016
+export const SPIN_ERROR__UNKNOWN_GAME = 0x1778; // 6008
+/** ArithmeticOverflow: Arithmetic overflow */
+export const SPIN_ERROR__ARITHMETIC_OVERFLOW = 0x1779; // 6009
 /** InvalidPlayer: Invalid player */
-export const SPIN_ERROR__INVALID_PLAYER = 0x1781; // 6017
+export const SPIN_ERROR__INVALID_PLAYER = 0x177a; // 6010
 /** InvalidDelegate: Signer is not the player or their authorized delegate */
-export const SPIN_ERROR__INVALID_DELEGATE = 0x1782; // 6018
+export const SPIN_ERROR__INVALID_DELEGATE = 0x177b; // 6011
 /** DelegateExpired: Delegate authorization has expired */
-export const SPIN_ERROR__DELEGATE_EXPIRED = 0x1783; // 6019
+export const SPIN_ERROR__DELEGATE_EXPIRED = 0x177c; // 6012
 /** DelegateLimitExceeded: Bet exceeds the delegate's remaining spend limit */
-export const SPIN_ERROR__DELEGATE_LIMIT_EXCEEDED = 0x1784; // 6020
+export const SPIN_ERROR__DELEGATE_LIMIT_EXCEEDED = 0x177d; // 6013
 /** InsufficientCredits: Insufficient credit balance */
-export const SPIN_ERROR__INSUFFICIENT_CREDITS = 0x1785; // 6021
+export const SPIN_ERROR__INSUFFICIENT_CREDITS = 0x177e; // 6014
 /** TreasuryInsolvent: Withdrawal would leave the treasury unable to cover player credits */
-export const SPIN_ERROR__TREASURY_INSOLVENT = 0x1786; // 6022
-/** VrfBettingDisabled: VRF betting is disabled; use the instant reveal chain */
-export const SPIN_ERROR__VRF_BETTING_DISABLED = 0x1787; // 6023
+export const SPIN_ERROR__TREASURY_INSOLVENT = 0x177f; // 6015
 /** ChainInactive: The reveal chain is not active */
-export const SPIN_ERROR__CHAIN_INACTIVE = 0x1788; // 6024
-/** ChainStale: Reveal does not match the chain head; fetch the next reveal and retry */
-export const SPIN_ERROR__CHAIN_STALE = 0x1789; // 6025
-/** ChainExhausted: The reveal chain is exhausted; the house must initialize a new chain */
-export const SPIN_ERROR__CHAIN_EXHAUSTED = 0x178a; // 6026
+export const SPIN_ERROR__CHAIN_INACTIVE = 0x1780; // 6016
+/** ChainExhausted: The reveal chain is exhausted; the house must rotate a new chain */
+export const SPIN_ERROR__CHAIN_EXHAUSTED = 0x1781; // 6017
 /** ChainTooLong: Chain length is out of range */
-export const SPIN_ERROR__CHAIN_TOO_LONG = 0x178b; // 6027
-/** ChainStillActive: The current chain is not exhausted yet */
-export const SPIN_ERROR__CHAIN_STILL_ACTIVE = 0x178c; // 6028
+export const SPIN_ERROR__CHAIN_TOO_LONG = 0x1782; // 6018
+/** ChainHasOpenBets: The chain still has open bets; settle or cancel them before rotating */
+export const SPIN_ERROR__CHAIN_HAS_OPEN_BETS = 0x1783; // 6019
+/** ChainBadReveal: Reveal is not the preimage of the current chain commitment */
+export const SPIN_ERROR__CHAIN_BAD_REVEAL = 0x1784; // 6020
+/** ChainEpochMismatch: Bet was placed under a previous chain epoch */
+export const SPIN_ERROR__CHAIN_EPOCH_MISMATCH = 0x1785; // 6021
+/** BetAlreadyOpen: Player already has an open bet; wait for it to settle */
+export const SPIN_ERROR__BET_ALREADY_OPEN = 0x1786; // 6022
+/** BetNotOpen: Bet is not open */
+export const SPIN_ERROR__BET_NOT_OPEN = 0x1787; // 6023
+/** BetNotHead: Bet is not at the head of the settlement queue */
+export const SPIN_ERROR__BET_NOT_HEAD = 0x1788; // 6024
+/** BetNotTimedOut: Bet has not timed out yet */
+export const SPIN_ERROR__BET_NOT_TIMED_OUT = 0x1789; // 6025
 
 export type SpinError =
-  | typeof SPIN_ERROR__ALREADY_RESOLVED
   | typeof SPIN_ERROR__ARITHMETIC_OVERFLOW
   | typeof SPIN_ERROR__BET_ABOVE_MAXIMUM
+  | typeof SPIN_ERROR__BET_ALREADY_OPEN
   | typeof SPIN_ERROR__BET_BELOW_MINIMUM
-  | typeof SPIN_ERROR__BET_EXCEEDS_BANKROLL_LIMIT
+  | typeof SPIN_ERROR__BET_NOT_HEAD
+  | typeof SPIN_ERROR__BET_NOT_OPEN
+  | typeof SPIN_ERROR__BET_NOT_TIMED_OUT
+  | typeof SPIN_ERROR__CHAIN_BAD_REVEAL
+  | typeof SPIN_ERROR__CHAIN_EPOCH_MISMATCH
   | typeof SPIN_ERROR__CHAIN_EXHAUSTED
+  | typeof SPIN_ERROR__CHAIN_HAS_OPEN_BETS
   | typeof SPIN_ERROR__CHAIN_INACTIVE
-  | typeof SPIN_ERROR__CHAIN_STALE
-  | typeof SPIN_ERROR__CHAIN_STILL_ACTIVE
   | typeof SPIN_ERROR__CHAIN_TOO_LONG
-  | typeof SPIN_ERROR__CLIENT_MISMATCH
   | typeof SPIN_ERROR__DELEGATE_EXPIRED
   | typeof SPIN_ERROR__DELEGATE_LIMIT_EXCEEDED
+  | typeof SPIN_ERROR__GAME_PAUSED
   | typeof SPIN_ERROR__HOUSE_PAUSED
   | typeof SPIN_ERROR__INSUFFICIENT_CREDITS
   | typeof SPIN_ERROR__INVALID_DELEGATE
   | typeof SPIN_ERROR__INVALID_PLAYER
-  | typeof SPIN_ERROR__NETWORK_STATE_MISMATCH
+  | typeof SPIN_ERROR__INVALID_TARGET
+  | typeof SPIN_ERROR__MAX_PAYOUT_EXCEEDS_BANKROLL
   | typeof SPIN_ERROR__NOT_AUTHORITY
-  | typeof SPIN_ERROR__PENDING_MISMATCH
-  | typeof SPIN_ERROR__RANDOMNESS_PENDING
-  | typeof SPIN_ERROR__REQUEST_MISMATCH
-  | typeof SPIN_ERROR__SPIN_NOT_RESOLVABLE
-  | typeof SPIN_ERROR__TARGET_OUT_OF_RANGE
   | typeof SPIN_ERROR__TREASURY_BALANCE_TOO_LOW
   | typeof SPIN_ERROR__TREASURY_INSOLVENT
-  | typeof SPIN_ERROR__TREASURY_MISMATCH
-  | typeof SPIN_ERROR__UNKNOWN_GAME
-  | typeof SPIN_ERROR__VRF_BETTING_DISABLED;
+  | typeof SPIN_ERROR__UNKNOWN_GAME;
 
 let spinErrorMessages: Record<SpinError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   spinErrorMessages = {
-    [SPIN_ERROR__ALREADY_RESOLVED]: `Spin is already resolved`,
-    [SPIN_ERROR__ARITHMETIC_OVERFLOW]: `Payout calculation overflow`,
+    [SPIN_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
     [SPIN_ERROR__BET_ABOVE_MAXIMUM]: `Bet above maximum`,
+    [SPIN_ERROR__BET_ALREADY_OPEN]: `Player already has an open bet; wait for it to settle`,
     [SPIN_ERROR__BET_BELOW_MINIMUM]: `Bet below minimum`,
-    [SPIN_ERROR__BET_EXCEEDS_BANKROLL_LIMIT]: `Bet exceeds the house bankroll limit (1% of treasury)`,
-    [SPIN_ERROR__CHAIN_EXHAUSTED]: `The reveal chain is exhausted; the house must initialize a new chain`,
+    [SPIN_ERROR__BET_NOT_HEAD]: `Bet is not at the head of the settlement queue`,
+    [SPIN_ERROR__BET_NOT_OPEN]: `Bet is not open`,
+    [SPIN_ERROR__BET_NOT_TIMED_OUT]: `Bet has not timed out yet`,
+    [SPIN_ERROR__CHAIN_BAD_REVEAL]: `Reveal is not the preimage of the current chain commitment`,
+    [SPIN_ERROR__CHAIN_EPOCH_MISMATCH]: `Bet was placed under a previous chain epoch`,
+    [SPIN_ERROR__CHAIN_EXHAUSTED]: `The reveal chain is exhausted; the house must rotate a new chain`,
+    [SPIN_ERROR__CHAIN_HAS_OPEN_BETS]: `The chain still has open bets; settle or cancel them before rotating`,
     [SPIN_ERROR__CHAIN_INACTIVE]: `The reveal chain is not active`,
-    [SPIN_ERROR__CHAIN_STALE]: `Reveal does not match the chain head; fetch the next reveal and retry`,
-    [SPIN_ERROR__CHAIN_STILL_ACTIVE]: `The current chain is not exhausted yet`,
     [SPIN_ERROR__CHAIN_TOO_LONG]: `Chain length is out of range`,
-    [SPIN_ERROR__CLIENT_MISMATCH]: `Client PDA does not match the registered VRF client`,
     [SPIN_ERROR__DELEGATE_EXPIRED]: `Delegate authorization has expired`,
     [SPIN_ERROR__DELEGATE_LIMIT_EXCEEDED]: `Bet exceeds the delegate's remaining spend limit`,
+    [SPIN_ERROR__GAME_PAUSED]: `This game is paused`,
     [SPIN_ERROR__HOUSE_PAUSED]: `House is paused`,
     [SPIN_ERROR__INSUFFICIENT_CREDITS]: `Insufficient credit balance`,
     [SPIN_ERROR__INVALID_DELEGATE]: `Signer is not the player or their authorized delegate`,
     [SPIN_ERROR__INVALID_PLAYER]: `Invalid player`,
-    [SPIN_ERROR__NETWORK_STATE_MISMATCH]: `Network state account is invalid`,
+    [SPIN_ERROR__INVALID_TARGET]: `Target out of range for this game`,
+    [SPIN_ERROR__MAX_PAYOUT_EXCEEDS_BANKROLL]: `The bet's maximum payout exceeds what the bankroll can cover`,
     [SPIN_ERROR__NOT_AUTHORITY]: `Only the house authority may perform this action`,
-    [SPIN_ERROR__PENDING_MISMATCH]: `Pending account does not match the randomness request`,
-    [SPIN_ERROR__RANDOMNESS_PENDING]: `Randomness request is not fulfilled yet`,
-    [SPIN_ERROR__REQUEST_MISMATCH]: `Request account does not match the VRF request PDA`,
-    [SPIN_ERROR__SPIN_NOT_RESOLVABLE]: `Spin is not yet resolvable`,
-    [SPIN_ERROR__TARGET_OUT_OF_RANGE]: `Target out of range`,
     [SPIN_ERROR__TREASURY_BALANCE_TOO_LOW]: `Treasury balance is too low`,
     [SPIN_ERROR__TREASURY_INSOLVENT]: `Withdrawal would leave the treasury unable to cover player credits`,
-    [SPIN_ERROR__TREASURY_MISMATCH]: `Treasury account does not match the network configuration`,
     [SPIN_ERROR__UNKNOWN_GAME]: `Unknown game`,
-    [SPIN_ERROR__VRF_BETTING_DISABLED]: `VRF betting is disabled; use the instant reveal chain`,
   };
 }
 

@@ -6,19 +6,20 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./cancelBet";
 export * from "./deposit";
 export * from "./initChain";
 export * from "./initConfig";
 export * from "./initCredits";
 export * from "./initGameConfig";
 export * from "./placeBet";
-export * from "./refundSpin";
-export * from "./resolveSpin";
 export * from "./revokeDelegate";
-export * from "./setChainMode";
+export * from "./rotateChain";
+export * from "./setChainActive";
 export * from "./setDelegate";
+export * from "./setGameLimits";
 export * from "./setPaused";
-export * from "./spinChain";
+export * from "./settleBet";
 export * from "./treasuryDeposit";
 export * from "./treasuryWithdraw";
 export * from "./withdraw";

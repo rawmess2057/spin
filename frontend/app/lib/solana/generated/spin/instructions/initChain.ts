@@ -80,12 +80,12 @@ export type InitChainInstruction<
 
 export type InitChainInstructionData = {
   discriminator: ReadonlyUint8Array;
-  seed: ReadonlyUint8Array;
+  genesis: ReadonlyUint8Array;
   length: bigint;
 };
 
 export type InitChainInstructionDataArgs = {
-  seed: ReadonlyUint8Array;
+  genesis: ReadonlyUint8Array;
   length: number | bigint;
 };
 
@@ -93,7 +93,7 @@ export function getInitChainInstructionDataEncoder(): FixedSizeEncoder<InitChain
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["seed", fixEncoderSize(getBytesEncoder(), 32)],
+      ["genesis", fixEncoderSize(getBytesEncoder(), 32)],
       ["length", getU64Encoder()],
     ]),
     (value) => ({ ...value, discriminator: INIT_CHAIN_DISCRIMINATOR })
@@ -103,7 +103,7 @@ export function getInitChainInstructionDataEncoder(): FixedSizeEncoder<InitChain
 export function getInitChainInstructionDataDecoder(): FixedSizeDecoder<InitChainInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["seed", fixDecoderSize(getBytesDecoder(), 32)],
+    ["genesis", fixDecoderSize(getBytesDecoder(), 32)],
     ["length", getU64Decoder()],
   ]);
 }
@@ -128,7 +128,7 @@ export type InitChainAsyncInput<
   treasury: Address<TAccountTreasury>;
   chain?: Address<TAccountChain>;
   systemProgram?: Address<TAccountSystemProgram>;
-  seed: InitChainInstructionDataArgs["seed"];
+  genesis: InitChainInstructionDataArgs["genesis"];
   length: InitChainInstructionDataArgs["length"];
 };
 
@@ -213,7 +213,7 @@ export type InitChainInput<
   treasury: Address<TAccountTreasury>;
   chain: Address<TAccountChain>;
   systemProgram?: Address<TAccountSystemProgram>;
-  seed: InitChainInstructionDataArgs["seed"];
+  genesis: InitChainInstructionDataArgs["genesis"];
   length: InitChainInstructionDataArgs["length"];
 };
 

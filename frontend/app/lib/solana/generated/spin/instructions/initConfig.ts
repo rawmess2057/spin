@@ -36,7 +36,7 @@ import {
   getAccountMetaFactory,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { findTreasuryPda, findVrfStatePda } from "../pdas";
+import { findTreasuryPda } from "../pdas";
 import { SPIN_PROGRAM_ADDRESS } from "../programs";
 
 export const INIT_CONFIG_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -51,7 +51,6 @@ export type InitConfigInstruction<
   TProgram extends string = typeof SPIN_PROGRAM_ADDRESS,
   TAccountAuthority extends string | AccountMeta<string> = string,
   TAccountTreasury extends string | AccountMeta<string> = string,
-  TAccountVrfState extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -66,9 +65,6 @@ export type InitConfigInstruction<
       TAccountTreasury extends string
         ? WritableAccount<TAccountTreasury>
         : TAccountTreasury,
-      TAccountVrfState extends string
-        ? WritableAccount<TAccountVrfState>
-        : TAccountVrfState,
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
@@ -106,26 +102,22 @@ export function getInitConfigInstructionDataCodec(): FixedSizeCodec<
 export type InitConfigAsyncInput<
   TAccountAuthority extends string = string,
   TAccountTreasury extends string = string,
-  TAccountVrfState extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   authority: TransactionSigner<TAccountAuthority>;
   treasury?: Address<TAccountTreasury>;
-  vrfState?: Address<TAccountVrfState>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
 
 export async function getInitConfigInstructionAsync<
   TAccountAuthority extends string,
   TAccountTreasury extends string,
-  TAccountVrfState extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SPIN_PROGRAM_ADDRESS,
 >(
   input: InitConfigAsyncInput<
     TAccountAuthority,
     TAccountTreasury,
-    TAccountVrfState,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress }
@@ -134,7 +126,6 @@ export async function getInitConfigInstructionAsync<
     TProgramAddress,
     TAccountAuthority,
     TAccountTreasury,
-    TAccountVrfState,
     TAccountSystemProgram
   >
 > {
@@ -145,7 +136,6 @@ export async function getInitConfigInstructionAsync<
   const originalAccounts = {
     authority: { value: input.authority ?? null, isWritable: true },
     treasury: { value: input.treasury ?? null, isWritable: true },
-    vrfState: { value: input.vrfState ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -157,9 +147,6 @@ export async function getInitConfigInstructionAsync<
   if (!accounts.treasury.value) {
     accounts.treasury.value = await findTreasuryPda();
   }
-  if (!accounts.vrfState.value) {
-    accounts.vrfState.value = await findVrfStatePda();
-  }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
@@ -170,7 +157,6 @@ export async function getInitConfigInstructionAsync<
     accounts: [
       getAccountMeta("authority", accounts.authority),
       getAccountMeta("treasury", accounts.treasury),
-      getAccountMeta("vrfState", accounts.vrfState),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getInitConfigInstructionDataEncoder().encode({}),
@@ -179,7 +165,6 @@ export async function getInitConfigInstructionAsync<
     TProgramAddress,
     TAccountAuthority,
     TAccountTreasury,
-    TAccountVrfState,
     TAccountSystemProgram
   >);
 }
@@ -187,26 +172,22 @@ export async function getInitConfigInstructionAsync<
 export type InitConfigInput<
   TAccountAuthority extends string = string,
   TAccountTreasury extends string = string,
-  TAccountVrfState extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   authority: TransactionSigner<TAccountAuthority>;
   treasury: Address<TAccountTreasury>;
-  vrfState: Address<TAccountVrfState>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
 
 export function getInitConfigInstruction<
   TAccountAuthority extends string,
   TAccountTreasury extends string,
-  TAccountVrfState extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof SPIN_PROGRAM_ADDRESS,
 >(
   input: InitConfigInput<
     TAccountAuthority,
     TAccountTreasury,
-    TAccountVrfState,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress }
@@ -214,7 +195,6 @@ export function getInitConfigInstruction<
   TProgramAddress,
   TAccountAuthority,
   TAccountTreasury,
-  TAccountVrfState,
   TAccountSystemProgram
 > {
   // Program address.
@@ -224,7 +204,6 @@ export function getInitConfigInstruction<
   const originalAccounts = {
     authority: { value: input.authority ?? null, isWritable: true },
     treasury: { value: input.treasury ?? null, isWritable: true },
-    vrfState: { value: input.vrfState ?? null, isWritable: true },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -243,7 +222,6 @@ export function getInitConfigInstruction<
     accounts: [
       getAccountMeta("authority", accounts.authority),
       getAccountMeta("treasury", accounts.treasury),
-      getAccountMeta("vrfState", accounts.vrfState),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getInitConfigInstructionDataEncoder().encode({}),
@@ -252,7 +230,6 @@ export function getInitConfigInstruction<
     TProgramAddress,
     TAccountAuthority,
     TAccountTreasury,
-    TAccountVrfState,
     TAccountSystemProgram
   >);
 }
@@ -265,8 +242,7 @@ export type ParsedInitConfigInstruction<
   accounts: {
     authority: TAccountMetas[0];
     treasury: TAccountMetas[1];
-    vrfState: TAccountMetas[2];
-    systemProgram: TAccountMetas[3];
+    systemProgram: TAccountMetas[2];
   };
   data: InitConfigInstructionData;
 };
@@ -279,12 +255,12 @@ export function parseInitConfigInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>
 ): ParsedInitConfigInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 4) {
+  if (instruction.accounts.length < 3) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 4,
+        expectedAccountMetas: 3,
       }
     );
   }
@@ -299,7 +275,6 @@ export function parseInitConfigInstruction<
     accounts: {
       authority: getNextAccount(),
       treasury: getNextAccount(),
-      vrfState: getNextAccount(),
       systemProgram: getNextAccount(),
     },
     data: getInitConfigInstructionDataDecoder().decode(instruction.data),

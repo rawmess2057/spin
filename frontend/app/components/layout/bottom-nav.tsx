@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BalancePill } from "../vault/balance-pill";
+import { GAMES } from "../../lib/games/registry";
 
 const TABS = [
   { href: "/", label: "Home", icon: "🏠" },
-  { href: "/plinko", label: "Plinko", icon: "📌" },
+  ...GAMES.map((g) => ({ href: g.href, label: g.label, icon: g.icon })),
 ];
 
 export function BottomNav() {
@@ -30,6 +32,9 @@ export function BottomNav() {
             </Link>
           );
         })}
+        <div className="flex flex-1 items-stretch justify-center text-muted">
+          <BalancePill compact />
+        </div>
       </div>
     </nav>
   );

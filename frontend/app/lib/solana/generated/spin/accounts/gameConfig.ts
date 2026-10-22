@@ -15,12 +15,12 @@ import {
   fetchEncodedAccounts,
   fixDecoderSize,
   fixEncoderSize,
+  getBooleanDecoder,
+  getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU16Decoder,
-  getU16Encoder,
   getU64Decoder,
   getU64Encoder,
   getU8Decoder,
@@ -52,10 +52,8 @@ export type GameConfig = {
   gameId: number;
   minBet: bigint;
   maxBet: bigint;
-  /** House edge in basis points (e.g. 200 = 2%). */
-  houseEdgeBp: number;
-  /** Game-specific params (reserved; grid/slot games ignore these). */
-  params: ReadonlyUint8Array;
+  /** Per-game pause switch (the treasury has a house-wide one). */
+  paused: boolean;
   bump: number;
 };
 
@@ -63,10 +61,8 @@ export type GameConfigArgs = {
   gameId: number;
   minBet: number | bigint;
   maxBet: number | bigint;
-  /** House edge in basis points (e.g. 200 = 2%). */
-  houseEdgeBp: number;
-  /** Game-specific params (reserved; grid/slot games ignore these). */
-  params: ReadonlyUint8Array;
+  /** Per-game pause switch (the treasury has a house-wide one). */
+  paused: boolean;
   bump: number;
 };
 
@@ -78,8 +74,7 @@ export function getGameConfigEncoder(): FixedSizeEncoder<GameConfigArgs> {
       ["gameId", getU8Encoder()],
       ["minBet", getU64Encoder()],
       ["maxBet", getU64Encoder()],
-      ["houseEdgeBp", getU16Encoder()],
-      ["params", fixEncoderSize(getBytesEncoder(), 32)],
+      ["paused", getBooleanEncoder()],
       ["bump", getU8Encoder()],
     ]),
     (value) => ({ ...value, discriminator: GAME_CONFIG_DISCRIMINATOR })
@@ -93,8 +88,7 @@ export function getGameConfigDecoder(): FixedSizeDecoder<GameConfig> {
     ["gameId", getU8Decoder()],
     ["minBet", getU64Decoder()],
     ["maxBet", getU64Decoder()],
-    ["houseEdgeBp", getU16Decoder()],
-    ["params", fixDecoderSize(getBytesDecoder(), 32)],
+    ["paused", getBooleanDecoder()],
     ["bump", getU8Decoder()],
   ]);
 }
@@ -161,5 +155,5 @@ export async function fetchAllMaybeGameConfig(
 }
 
 export function getGameConfigSize(): number {
-  return 60;
+  return 27;
 }

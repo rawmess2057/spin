@@ -40,7 +40,6 @@ export type BallCallbacks = {
   onComplete?: (ballId: number) => void;
 };
 
-const MAX_CONSECUTIVE = 15;
 const HOLD_AT_BUCKET_MS = 200;
 const FADE_MS = 300;
 const GRAVITY_STRENGTH = 0.35; // parabolic arc intensity (positive = downward bulge)
@@ -78,8 +77,11 @@ export class BallManager {
   private container: Container;
   private trailContainer: Container;
   private balls = new Map<number, Ball>();
+  /** Per-ball landing callbacks, dropped once fired or on clear(). */
+  private landings = new Map<number, (id: number) => void>();
   private nextId = 1;
   private running: boolean = false;
+  private frame: number | null = null;
   private lastTime = 0;
   private callbacks: BallCallbacks = {};
 
@@ -96,11 +98,6 @@ export class BallManager {
 
   get activeCount(): number {
     return this.balls.size;
-  }
-
-  /** Number of live consecutive balls; concurrent drops share this cursor. */
-  get canDrop(): boolean {
-    return this.balls.size < MAX_CONSECUTIVE;
   }
 
   drop(keyframes: Keyframe[], onComplete?: (id: number) => void): number {
@@ -147,20 +144,21 @@ export class BallManager {
     this.container.addChild(sprite);
     this.balls.set(id, ball);
 
-    if (onComplete) {
-      const prev = this.callbacks.onComplete;
-      this.callbacks.onComplete = (bid) => {
-        if (bid === id) onComplete(id);
-        prev?.(bid);
-      };
-    }
+    if (onComplete) this.landings.set(id, onComplete);
 
     if (!this.running) {
       this.running = true;
       this.lastTime = performance.now();
-      requestAnimationFrame(this.tick);
+      this.frame = requestAnimationFrame(this.tick);
     }
     return id;
+  }
+
+  private reportLanding(id: number) {
+    const cb = this.landings.get(id);
+    this.landings.delete(id);
+    cb?.(id);
+    this.callbacks.onComplete?.(id);
   }
 
   private tick = (now: number) => {
@@ -192,9 +190,10 @@ export class BallManager {
     }
 
     if (anyAlive || this.balls.size > 0) {
-      requestAnimationFrame(this.tick);
+      this.frame = requestAnimationFrame(this.tick);
     } else {
       this.running = false;
+      this.frame = null;
     }
   };
 
@@ -212,7 +211,7 @@ export class BallManager {
       // is still visible in its pocket.
       if (!ball.landed) {
         ball.landed = true;
-        this.callbacks.onComplete?.(ball.id);
+        this.reportLanding(ball.id);
       }
       if (ball.holdMs > 0) {
         ball.holdMs -= dt;
@@ -301,6 +300,11 @@ export class BallManager {
       ball.trail.destroy();
     }
     this.balls.clear();
+    this.landings.clear();
+    // Cancel the queued frame too, or the next drop would start a second
+    // loop alongside the old one and everything would run at double speed.
+    if (this.frame != null) cancelAnimationFrame(this.frame);
+    this.frame = null;
     this.running = false;
   }
 }

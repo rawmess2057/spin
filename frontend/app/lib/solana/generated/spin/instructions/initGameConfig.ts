@@ -14,8 +14,6 @@ import {
   getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
-  getU16Decoder,
-  getU16Encoder,
   getU64Decoder,
   getU64Encoder,
   getU8Decoder,
@@ -87,16 +85,12 @@ export type InitGameConfigInstructionData = {
   gameId: number;
   minBet: bigint;
   maxBet: bigint;
-  houseEdgeBp: number;
-  params: ReadonlyUint8Array;
 };
 
 export type InitGameConfigInstructionDataArgs = {
   gameId: number;
   minBet: number | bigint;
   maxBet: number | bigint;
-  houseEdgeBp: number;
-  params: ReadonlyUint8Array;
 };
 
 export function getInitGameConfigInstructionDataEncoder(): FixedSizeEncoder<InitGameConfigInstructionDataArgs> {
@@ -106,8 +100,6 @@ export function getInitGameConfigInstructionDataEncoder(): FixedSizeEncoder<Init
       ["gameId", getU8Encoder()],
       ["minBet", getU64Encoder()],
       ["maxBet", getU64Encoder()],
-      ["houseEdgeBp", getU16Encoder()],
-      ["params", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
     (value) => ({ ...value, discriminator: INIT_GAME_CONFIG_DISCRIMINATOR })
   );
@@ -119,8 +111,6 @@ export function getInitGameConfigInstructionDataDecoder(): FixedSizeDecoder<Init
     ["gameId", getU8Decoder()],
     ["minBet", getU64Decoder()],
     ["maxBet", getU64Decoder()],
-    ["houseEdgeBp", getU16Decoder()],
-    ["params", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
@@ -147,8 +137,6 @@ export type InitGameConfigInput<
   gameId: InitGameConfigInstructionDataArgs["gameId"];
   minBet: InitGameConfigInstructionDataArgs["minBet"];
   maxBet: InitGameConfigInstructionDataArgs["maxBet"];
-  houseEdgeBp: InitGameConfigInstructionDataArgs["houseEdgeBp"];
-  params: InitGameConfigInstructionDataArgs["params"];
 };
 
 export function getInitGameConfigInstruction<

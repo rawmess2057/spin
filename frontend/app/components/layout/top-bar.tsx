@@ -5,10 +5,13 @@ import { usePathname } from "next/navigation";
 import { ClusterSelect } from "../wallet/cluster-select";
 import { WalletButton } from "../wallet/wallet-button";
 import { SoundToggle } from "../sound-toggle";
+import { BalancePill } from "../vault/balance-pill";
+import { GAMES } from "../../lib/games/registry";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
-  { href: "/plinko", label: "Plinko" },
+  ...GAMES.map((g) => ({ href: g.href, label: g.label })),
+  { href: "/cashier", label: "Cashier" },
 ];
 
 export function TopBar() {
@@ -49,6 +52,7 @@ export function TopBar() {
         <div className="flex items-center gap-3">
           <SoundToggle />
           <ClusterSelect />
+          <BalancePill />
           <WalletButton />
         </div>
       </div>

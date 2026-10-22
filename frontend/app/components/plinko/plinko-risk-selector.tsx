@@ -9,6 +9,8 @@ import {
 type Props = {
   value: PlinkoRisk;
   onChange: (risk: PlinkoRisk) => void;
+  /** Locked while a ball is in flight: the paytable can't change under it. */
+  disabled?: boolean;
 };
 
 const RISKS: PlinkoRisk[] = [
@@ -24,7 +26,7 @@ const RISK_COLORS: Record<PlinkoRisk, string> = {
   [PLINKO_RISK.HIGH]: "#ff4d5e",
 };
 
-export function RiskSelector({ value, onChange }: Props) {
+export function RiskSelector({ value, onChange, disabled }: Props) {
   return (
     <div className="flex w-full gap-1 rounded-xl border border-border-low bg-background/50 p-1">
       {RISKS.map((r) => {
@@ -35,8 +37,9 @@ export function RiskSelector({ value, onChange }: Props) {
             key={r}
             type="button"
             onClick={() => onChange(r)}
+            disabled={disabled}
             aria-pressed={active}
-            className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-extrabold uppercase tracking-wider transition-all duration-150"
+            className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-extrabold uppercase tracking-wider transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50"
             style={
               active
                 ? {

@@ -1,19 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import { isHapticEnabled, setHapticEnabled, haptic } from "../lib/sound/events";
 
+const listeners = new Set<() => void>();
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
 export function HapticsToggle({ compact = false }: { compact?: boolean }) {
-  const [enabled, setEnabled] = useState(isHapticEnabled());
+  // External store so the server render (haptics off) and the hydrated
+  // client agree; see SoundToggle.
+  const enabled = useSyncExternalStore(subscribe, isHapticEnabled, () => false);
 
   return (
     <button
       type="button"
       onClick={() => {
         const next = !enabled;
-        setEnabled(next);
         setHapticEnabled(next);
         if (next) haptic("light");
+        for (const l of listeners) l();
       }}
       title={enabled ? "Disable haptic feedback" : "Enable haptic feedback"}
       aria-label={

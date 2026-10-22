@@ -43,7 +43,9 @@ export function WalletButton() {
   );
 
   const shownConnected = mounted && connected != null;
-  const walletAddress = shownConnected ? connected?.account?.address : undefined;
+  const walletAddress = shownConnected
+    ? connected?.account?.address
+    : undefined;
   const balance = useBalance(
     walletAddress ? address(walletAddress) : undefined
   );

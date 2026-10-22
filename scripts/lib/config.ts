@@ -7,43 +7,49 @@ import {
 
 export const PROGRAM_ID = "9sd7ASeBUmcCNm4eVFfQ7rSujtbVLmu8wMUh9PwdNWvP" as const;
 
-export const VRF_PROGRAM_ID =
-  "VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU" as const;
-
+/** PDA seeds — must match programs/spin/src/constants.rs. */
 export const SEEDS = {
   HOUSE: "house",
-  CHAIN: "chain",
-  VRF_STATE: "vrf_state",
-  PENDING: "pending",
-  GAME_CONFIG: "game_config",
+  GAME_CONFIG: "game",
   SESSION: "session",
   VAULT: "vault",
-  CREDITS: "credits",
-  VRF_CONFIG: "OraoVrfCbConfig",
-  VRF_CLIENT: "OraoVrfCbClient",
-  VRF_REQUEST: "OraoVrfCbRequest",
+  CREDITS: "ledger",
+  CHAIN: "chain2",
+  BET: "bet",
 } as const;
 
+/** Game ids — must match programs/spin/src/constants.rs. */
+export const GAMES = {
+  PLINKO: 7,
+  MEGAWAYS: 8,
+  WHEEL: 9,
+  HOLD_SPIN: 10,
+} as const;
+
+/** 1 💎 = 100,000 lamports, matching frontend/app/lib/diamonds.ts. */
+export const DIAMOND_LAMPORTS = 100_000n;
+
+function requireEnv(name: string, fallback?: string): string {
+  const v = process.env[name] ?? fallback;
+  if (v == null) {
+    throw new Error(`${name} is not set (see scripts/.env.example)`);
+  }
+  return v;
+}
+
 export function rpcUrl(): string {
-  return (
-    process.env.SOLANA_RPC_URL ??
-    "https://devnet.helius-rpc.com/?api-key=d9b9a17e-14dc-4e55-996f-02e096dc0c53"
-  );
+  return requireEnv("SOLANA_RPC_URL", "https://api.devnet.solana.com");
 }
 
 export function wsUrl(): string {
-  return (
-    process.env.SOLANA_WS_URL ??
-    "wss://devnet.helius-rpc.com/?api-key=d9b9a17e-14dc-4e55-996f-02e096dc0c53"
-  );
+  return requireEnv("SOLANA_WS_URL", "wss://api.devnet.solana.com");
 }
 
 export function clusterLabel(): string {
-  return process.env.SOLANA_RPC_URL?.includes("mainnet")
-    ? "mainnet"
-    : "devnet";
+  return rpcUrl().includes("mainnet") ? "mainnet" : "devnet";
 }
 
+/** The house authority / crank keypair (`KEYPAIR`, default solana CLI id). */
 export async function loadKeypairSigner(path?: string): Promise<KeyPairSigner<string>> {
   const file = path ?? process.env.KEYPAIR ?? `${homedir()}/.config/solana/id.json`;
   const raw = readFileSync(file, "utf8");

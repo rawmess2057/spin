@@ -8,6 +8,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint",
+    "selftest:megaways": "tsx scripts/megaways-selftest.ts",
+    "sim:megaways": "tsx scripts/megaways-sim.ts",
     "start": "next start"
   },
   "description": "Next.js, Tailwind, @solana/kit wallet + on-chain actions",

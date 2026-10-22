@@ -48,20 +48,4 @@ export function plinkoPalette(rows: number): Palette {
   return p;
 }
 
-/**
- * Formats a multiplier (in basis points) for display, dropping the trailing
- * "×" for very large multipliers — mirroring the reference's
- * `{payout}{payout < 100 ? '×' : ''}`.
- */
-export function compactMultiplier(multiplierBp: bigint): string {
-  const x = Number(multiplierBp) / 10000;
-  const text =
-    x >= 1000
-      ? `${Math.round(x).toLocaleString("en-US")}`
-      : x >= 100
-        ? `${Math.round(x).toLocaleString("en-US")}`
-        : x >= 10
-          ? `${x.toFixed(1).replace(/\.0$/, "")}`
-          : `${x.toFixed(2).replace(/\.?0+$/, "")}`;
-  return x < 100 ? `${text}×` : text;
-}
+export { compactMultiplier } from "../../lib/format";

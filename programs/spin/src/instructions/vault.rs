@@ -10,9 +10,11 @@ use crate::state::{CreditLedger, HouseTreasury, PlayerVault};
 // ---------------------------------------------------------------------------
 
 /// Creates the global credit ledger. One-time bootstrap, alongside
-/// `init_config`.
-pub fn init_credits(ctx: Context<InitCredits>) -> Result<()> {
-    ctx.accounts.credits.total = 0;
+/// `init_config`. `initial_total` lets a redeploy that kept existing player
+/// vaults seed the ledger with the sum of their balances (0 on a fresh house).
+pub fn init_credits(ctx: Context<InitCredits>, initial_total: u64) -> Result<()> {
+    ctx.accounts.credits.total = initial_total;
+    ctx.accounts.credits.reserved = 0;
     ctx.accounts.credits.bump = ctx.bumps.credits;
     msg!("Credit ledger initialized: {}", ctx.accounts.credits.key());
     Ok(())
@@ -196,7 +198,8 @@ pub struct Withdraw<'info> {
 ///
 /// Both bounds are mandatory: `expiry_slot` must be in the future and
 /// `spend_limit` must be non-zero, so an authorization can never be unbounded
-/// in either time or value.
+/// in either time or value. `spend_limit` is a *net-loss* allowance: stakes
+/// consume it and payouts/refunds restore it (see `PlayerVault`).
 pub fn set_delegate(
     ctx: Context<SetDelegate>,
     delegate: Pubkey,

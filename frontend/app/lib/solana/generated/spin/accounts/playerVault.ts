@@ -58,7 +58,7 @@ export type PlayerVault = {
   delegate: Address;
   /** Slot after which `delegate` is no longer accepted. */
   delegateExpiry: bigint;
-  /** Lamports the delegate may still wager before re-authorization. */
+  /** Net lamports the delegate may still lose before re-authorization. */
   delegateSpendLeft: bigint;
   bump: number;
 };
@@ -71,7 +71,7 @@ export type PlayerVaultArgs = {
   delegate: Address;
   /** Slot after which `delegate` is no longer accepted. */
   delegateExpiry: number | bigint;
-  /** Lamports the delegate may still wager before re-authorization. */
+  /** Net lamports the delegate may still lose before re-authorization. */
   delegateSpendLeft: number | bigint;
   bump: number;
 };

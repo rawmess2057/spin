@@ -1,5 +1,6 @@
 pub mod constants;
 pub mod error;
+pub mod games;
 pub mod instructions;
 pub mod state;
 
@@ -24,10 +25,17 @@ pub mod spin {
         game_id: u8,
         min_bet: u64,
         max_bet: u64,
-        house_edge_bp: u16,
-        params: [u8; 32],
     ) -> Result<()> {
-        admin::init_game_config(ctx, game_id, min_bet, max_bet, house_edge_bp, params)
+        admin::init_game_config(ctx, game_id, min_bet, max_bet)
+    }
+
+    pub fn set_game_limits(
+        ctx: Context<SetGameLimits>,
+        min_bet: u64,
+        max_bet: u64,
+        paused: bool,
+    ) -> Result<()> {
+        admin::set_game_limits(ctx, min_bet, max_bet, paused)
     }
 
     pub fn set_paused(ctx: Context<SetPaused>, paused: bool) -> Result<()> {
@@ -43,8 +51,8 @@ pub mod spin {
     }
 
     // Player credit vault
-    pub fn init_credits(ctx: Context<InitCredits>) -> Result<()> {
-        vault::init_credits(ctx)
+    pub fn init_credits(ctx: Context<InitCredits>, initial_total: u64) -> Result<()> {
+        vault::init_credits(ctx, initial_total)
     }
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
@@ -68,41 +76,35 @@ pub mod spin {
         vault::revoke_delegate(ctx)
     }
 
-    // Betting
+    // Betting (commit-reveal)
     pub fn place_bet(
         ctx: Context<PlaceBet>,
         game_id: u8,
         amount: u64,
         target: u64,
-        seed: [u8; 32],
+        client_seed: [u8; 32],
     ) -> Result<()> {
-        bet::place_bet(ctx, game_id, amount, target, seed)
+        bet::place_bet(ctx, game_id, amount, target, client_seed)
     }
 
-    pub fn resolve_spin(ctx: Context<ResolveSpin>) -> Result<()> {
-        bet::resolve_spin(ctx)
+    pub fn settle_bet(ctx: Context<SettleBet>, reveal: [u8; 32]) -> Result<()> {
+        bet::settle_bet(ctx, reveal)
     }
 
-    pub fn refund_spin(ctx: Context<RefundSpin>, seed: [u8; 32]) -> Result<()> {
-        bet::refund_spin(ctx, seed)
+    pub fn cancel_bet(ctx: Context<CancelBet>) -> Result<()> {
+        bet::cancel_bet(ctx)
     }
 
-    // Instant reveal chain
-    pub fn init_chain(ctx: Context<InitChain>, seed: [u8; 32], length: u64) -> Result<()> {
-        chain::init_chain(ctx, seed, length)
+    // Chain administration
+    pub fn init_chain(ctx: Context<InitChain>, genesis: [u8; 32], length: u64) -> Result<()> {
+        chain::init_chain(ctx, genesis, length)
     }
 
-    pub fn set_chain_mode(ctx: Context<SetChainMode>, active: bool, vrf_enabled: bool) -> Result<()> {
-        chain::set_chain_mode(ctx, active, vrf_enabled)
+    pub fn rotate_chain(ctx: Context<RotateChain>, genesis: [u8; 32], length: u64) -> Result<()> {
+        chain::rotate_chain(ctx, genesis, length)
     }
 
-    pub fn spin_chain(
-        ctx: Context<SpinChain>,
-        game_id: u8,
-        amount: u64,
-        target: u64,
-        reveal: [u8; 32],
-    ) -> Result<()> {
-        chain::spin_chain(ctx, game_id, amount, target, reveal)
+    pub fn set_chain_active(ctx: Context<RotateChain>, active: bool) -> Result<()> {
+        chain::set_chain_active(ctx, active)
     }
 }

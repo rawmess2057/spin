@@ -1,13 +1,14 @@
 use anchor_lang::prelude::*;
-use solana_sha256_hasher::hash;
 
 use crate::constants::*;
 
 // ---------------------------------------------------------------------------
-// Our program state
+// House
 // ---------------------------------------------------------------------------
 
-/// Central house bankroll PDA. Holds all SOL bets and pays out wins.
+/// Central house bankroll PDA. Holds every player deposit and the house's own
+/// bankroll in one lamport balance; [`CreditLedger`] records how much of it
+/// is owed to players.
 #[account]
 pub struct HouseTreasury {
     pub authority: Pubkey,
@@ -19,35 +20,41 @@ impl HouseTreasury {
     pub const SIZE: usize = 8 + 32 + 1 + 1;
 }
 
-/// Immutable per-game configuration (set once at initialization).
+/// Per-game bet limits. Created once per game id; the limits can be adjusted
+/// by the authority with `set_game_limits`. The paytable itself is code
+/// (`crate::games`) and never changes under a live bet.
 #[account]
 pub struct GameConfig {
     pub game_id: u8,
     pub min_bet: u64,
     pub max_bet: u64,
-    /// House edge in basis points (e.g. 200 = 2%).
-    pub house_edge_bp: u16,
-    /// Game-specific params (reserved; grid/slot games ignore these).
-    pub params: [u8; 32],
+    /// Per-game pause switch (the treasury has a house-wide one).
+    pub paused: bool,
     pub bump: u8,
 }
 
 impl GameConfig {
-    pub const SIZE: usize = 8 + 1 + 8 + 8 + 2 + 32 + 1;
+    pub const SIZE: usize = 8 + 1 + 8 + 8 + 1 + 1;
 }
+
+// ---------------------------------------------------------------------------
+// Players
+// ---------------------------------------------------------------------------
 
 /// Per-player credit vault.
 ///
-/// Holds the lamports a player has bought in with, expressed as a plain
-/// balance rather than lamports sitting in this account: the lamports
-/// themselves live in [`HouseTreasury`] (deposited there by `deposit`), and
-/// [`CreditLedger::total`] tracks the sum of every vault balance so the house
-/// can be prevented from withdrawing money it owes players.
+/// `balance` is a plain number: the lamports themselves sit in
+/// [`HouseTreasury`] (moved there by `deposit`), and [`CreditLedger::total`]
+/// tracks the sum of every vault balance so the house can be prevented from
+/// withdrawing money it owes players.
 ///
 /// `delegate` is an optional session key that may place bets on the player's
-/// behalf without the player's wallet signing each one. It is deliberately
-/// bounded on two axes — a slot deadline and a remaining spend cap — so a
-/// stolen session key can lose a known maximum. It can never withdraw.
+/// behalf without the wallet signing each one. It is bounded by a slot
+/// deadline and a *net-loss* allowance: `delegate_spend_left` goes down by the
+/// stake on every bet and back up by the payout when it settles (or by the
+/// stake when it is cancelled), so winnings can be re-wagered without a new
+/// wallet prompt while a stolen key can still lose at most the allowance. It
+/// can never withdraw.
 #[account]
 pub struct PlayerVault {
     pub player: Pubkey,
@@ -57,7 +64,7 @@ pub struct PlayerVault {
     pub delegate: Pubkey,
     /// Slot after which `delegate` is no longer accepted.
     pub delegate_expiry: u64,
-    /// Lamports the delegate may still wager before re-authorization.
+    /// Net lamports the delegate may still lose before re-authorization.
     pub delegate_spend_left: u64,
     pub bump: u8,
 }
@@ -71,20 +78,22 @@ impl PlayerVault {
     }
 }
 
-/// Total lamports credited to players across every [`PlayerVault`].
+/// Global accounting of what the treasury does *not* own.
 ///
-/// Player deposits are commingled with the bankroll in [`HouseTreasury`], so
-/// this is the only record of how much of that balance is owed. It gates
-/// `treasury_withdraw`, which is what stops the house authority from
-/// withdrawing player funds.
+/// `total` is the sum of every [`PlayerVault::balance`]; `reserved` is the
+/// sum of the maximum possible payout of every open bet. Together they gate
+/// `treasury_withdraw` and the bankroll check in `place_bet`, which is what
+/// keeps the house solvent: a bet is only accepted if its best case can be
+/// paid from lamports nobody else has a claim on.
 #[account]
 pub struct CreditLedger {
     pub total: u64,
+    pub reserved: u64,
     pub bump: u8,
 }
 
 impl CreditLedger {
-    pub const SIZE: usize = 8 + 8 + 1;
+    pub const SIZE: usize = 8 + 8 + 8 + 1;
 }
 
 /// Per-player statistics.
@@ -101,290 +110,115 @@ impl PlayerSession {
     pub const SIZE: usize = 8 + 32 + 8 + 8 + 8 + 1;
 }
 
-/// VRF request authority. Signs every request CPI; registered with ORAO.
-#[account]
-pub struct VrfState {
-    pub bump: u8,
-}
+// ---------------------------------------------------------------------------
+// Commit-reveal chain
+// ---------------------------------------------------------------------------
 
-impl VrfState {
-    pub const SIZE: usize = 8 + 1;
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq)]
-pub enum PendingStatus {
-    AwaitingResolution,
-    Resolved,
-}
-
-/// A bet in flight: placed, waiting on VRF fulfillment.
-#[account]
-pub struct PendingSpin {
-    pub player: Pubkey,
-    pub game_id: u8,
-    pub amount: u64,
-    /// Games other than Dice ignored the target (frontends send 0).
-    pub target: u64,
-    /// The VRF request seed (also the `pending` PDA seed component).
-    pub seed: [u8; 32],
-    pub status: PendingStatus,
-    pub created_slot: u64,
-    /// Who paid this account's rent — the player or their session key. Rent is
-    /// returned here when the spin resolves or is refunded.
-    pub rent_payer: Pubkey,
-    pub bump: u8,
-}
-
-impl PendingSpin {
-    pub const SIZE: usize = 8 + 32 + 1 + 8 + 8 + 32 + 1 + 8 + 32 + 1;
-}
-
-/// The house's instant reveal chain.
+/// The house's commit-reveal hash chain.
 ///
-/// One global chain serves every game. The house commits to `length` reveals
-/// by publishing a `seed`: reveal *i* is `sha256(seed || i.to_le_bytes())`,
-/// and the chain is consumed in reverse order (index 0 first, i.e. the
-/// reveal for index 0 is `sha256(seed || 0x0000..0)`), so the house has no
-/// way to choose outcomes after the fact. Each `spin_chain` consumes exactly
-/// one reveal, which is passed as the instruction's `reveal` argument and
-/// must equal the current head — the chain's derived value at `index`. A
-/// concurrent spin that races for the same reveal gets `ChainStale` and the
-/// client simply refetches the next one.
+/// Offline, the house draws a secret and computes `s_N = sha256(secret)`,
+/// `s_i = sha256(s_{i+1})`. It publishes only `s_0` (`genesis`), which
+/// becomes the first `commitment`. Settling bet after bet, the house reveals
+/// `s_1, s_2, …`: each must hash to the current commitment and then becomes
+/// the new commitment. Every value was fixed when the chain was generated and
+/// nobody can invert the hash, so the house cannot pick a reveal and a player
+/// cannot predict one.
 ///
-/// The 64 bytes of randomness for outcome evaluation are
-/// `reveal || sha256(reveal)`, which a client can reproduce offline to
-/// verify any past spin against this account's seed and index.
+/// Bets are settled strictly in the order they were placed (`cursor` chases
+/// `next_seq`). Stalling one bet therefore stalls every later one — publicly —
+/// and after [`BET_TIMEOUT_SLOTS`] anyone may cancel the head bet, refund its
+/// stake and bump `stalls`.
 #[account]
 pub struct ChainState {
-    /// House authority that initialized the chain.
+    /// House authority that published this epoch.
     pub house: Pubkey,
-    /// Chain seed; reveal i = sha256(seed || i.to_le_bytes()).
-    pub seed: [u8; 32],
-    /// The next unconsumed reveal index (0..length).
+    /// Incremented on every rotation; bets bind to the epoch they were
+    /// placed in and can only settle within it.
+    pub epoch: u64,
+    /// `s_0` of this epoch, kept for verifying historical bets.
+    pub genesis: [u8; 32],
+    /// Current tip: the hash the next reveal must have as its image.
+    pub commitment: [u8; 32],
+    /// Reveals consumed in this epoch (the index of `commitment`).
     pub index: u64,
-    /// Total number of reveals in this chain.
+    /// Reveals available in this epoch.
     pub length: u64,
-    /// Whether the chain accepts spins.
+    /// FIFO ticket handed to the next bet placed.
+    pub next_seq: u64,
+    /// Ticket of the bet that must be settled or cancelled next.
+    pub cursor: u64,
+    /// Bets cancelled after a timeout — a public record of house stalls.
+    pub stalls: u64,
+    /// Whether the chain accepts new bets.
     pub active: bool,
-    /// When true, the legacy VRF betting path is accepted instead of the
-    /// chain. `init_chain` turns it off; `set_chain_mode` can restore it for
-    /// rollback. `spin_chain` rejects when it is true, and clients refuse to
-    /// call the VRF path when the chain exists and it is false.
-    pub vrf_enabled: bool,
     pub bump: u8,
 }
 
 impl ChainState {
-    pub const SIZE: usize = 8 + 32 + 32 + 8 + 8 + 1 + 1 + 1;
+    pub const SIZE: usize = 8 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 1 + 1;
 
-    /// The reveal the chain currently expects: sha256(seed || index LE).
-    pub fn head(&self) -> [u8; 32] {
-        chain_head(&self.seed, self.index)
+    pub fn open_bets(&self) -> u64 {
+        self.next_seq.saturating_sub(self.cursor)
     }
 }
 
-/// reveal i = sha256(seed || i.to_le_bytes()).
-pub fn chain_head(seed: &[u8; 32], index: u64) -> [u8; 32] {
-    let mut input = [0u8; 40];
-    input[..32].copy_from_slice(seed);
-    input[32..].copy_from_slice(&index.to_le_bytes());
-    hash(&input).to_bytes()
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BetStatus {
+    None,
+    Open,
+    Settled,
+    Cancelled,
 }
 
-// ---------------------------------------------------------------------------
-// ORAO VRF Callback program mirror types.
-//
-// These mirror the account layouts of the ORAO Callback VRF program
-// (VRFCBePmGTpZ234BhbzNNzmyg39Rgdd6VgdfhHwKypU) so we can read its accounts
-// and build its `Request` CPI without depending on the (solana-2.x-era)
-// orao-solana-vrf-cb crate.
-//
-// Discriminators are derived from the struct names, which match the ORAO
-// program's own types, so `Account<'info, T>` validation works directly.
-// ---------------------------------------------------------------------------
-
-/// ORAO VRF network state PDA ([`VRF_CONFIG_SEED`]).
+/// A player's bet account (`["bet", player]`): one per player, created on
+/// their first bet and reused for every later one. While `status == Open` the
+/// stake has been debited and `reserved` lamports of bankroll are held; the
+/// result fields are filled by `settle_bet` and stay readable until the next
+/// `place_bet` overwrites them.
 #[account]
-pub struct NetworkState {
+pub struct BetState {
+    pub player: Pubkey,
+    /// Per-player bet counter; mixed into the randomness.
+    pub nonce: u64,
+    /// Global FIFO ticket from `ChainState::next_seq`.
+    pub seq: u64,
+    pub chain_epoch: u64,
+    pub game_id: u8,
+    pub status: BetStatus,
+    pub amount: u64,
+    pub target: u64,
+    /// 32 random bytes chosen by the player's client at bet time.
+    pub client_seed: [u8; 32],
+    /// Maximum payout held against the bankroll while the bet is open.
+    pub reserved: u64,
+    pub placed_slot: u64,
+    /// `ChainState::index` when the bet was placed.
+    pub index_at_place: u64,
+    /// `ChainState::commitment` when the bet was placed. Verifying a bet is
+    /// `sha256^(reveal_index - index_at_place)(reveal) == commitment`.
+    pub commitment: [u8; 32],
+    // --- filled by settle_bet ---
+    pub reveal: [u8; 32],
+    /// `ChainState::index` after this bet's reveal was consumed.
+    pub reveal_index: u64,
+    /// Game-specific outcome summary (Plinko bucket, Megaways total bp, ...).
+    pub roll: u64,
+    pub payout: u64,
+    pub settled_slot: u64,
     pub bump: u8,
-    pub config: NetworkConfiguration,
-    pub num_requests: u64,
-    pub num_registered: u64,
-    pub num_terminated: u64,
 }
 
-#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
-pub struct NetworkConfiguration {
-    pub authority: Pubkey,
-    pub treasury: Pubkey,
-    pub request_fee: u64,
-    pub callback_deadline: u64,
-    pub fulfill_authorities: Vec<Pubkey>,
-}
-
-/// ORAO VRF client PDA ([`VRF_CLIENT_SEED`], program, state).
-#[account]
-pub struct Client {
-    pub bump: u8,
-    pub owner: Pubkey,
-    pub program: Pubkey,
-    pub state: Pubkey,
-    pub num_requests: u64,
-    pub callback: Option<ValidatedCallback>,
-}
-
-#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
-pub struct ValidatedCallback {
-    pub remaining_accounts: Vec<ValidatedRemainingAccount>,
-    pub data: Vec<u8>,
-}
-
-#[derive(Clone, Copy, AnchorSerialize, AnchorDeserialize)]
-pub struct ValidatedRemainingAccount {
-    pub pubkey: Pubkey,
-    pub is_writable: bool,
-}
-
-/// ORAO VRF request PDA ([`VRF_REQUEST_SEED`], client, seed).
-#[account]
-pub struct RequestAccount {
-    pub bump: u8,
-    pub slot: u64,
-    pub client: Pubkey,
-    pub seed: [u8; 32],
-    pub state: RequestState,
-}
-
-#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
-pub enum RequestState {
-    Pending(Pending),
-    Fulfilled(Fulfilled),
-}
-
-impl RequestState {
-    pub fn fulfilled(&self) -> Option<&Fulfilled> {
-        match self {
-            RequestState::Pending(_) => None,
-            RequestState::Fulfilled(x) => Some(x),
-        }
-    }
-}
-
-#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
-pub struct Pending {
-    pub responses: Vec<Response>,
-    pub callback: Option<ValidatedCallback>,
-    pub callback_override: bool,
-}
-
-#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
-pub struct Fulfilled {
-    pub randomness: [u8; 64],
-    pub responses: Option<Vec<Response>>,
-}
-
-#[derive(Clone, AnchorSerialize, AnchorDeserialize)]
-pub struct Response {
-    pub pubkey: Pubkey,
-    pub randomness: [u8; 64],
+impl BetState {
+    pub const SIZE: usize =
+        8 + 32 + 8 + 8 + 8 + 1 + 1 + 8 + 8 + 32 + 8 + 8 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 1;
 }
 
 // ---------------------------------------------------------------------------
-// ORAO `Request` CPI payload builders (serialize-only)
+// PDA helpers (used by tests and off-chain tooling)
 // ---------------------------------------------------------------------------
 
-/// Parameters of the ORAO `Request` instruction (borsh layout).
-#[derive(Clone, AnchorSerialize)]
-pub struct RequestParams {
-    pub seed: [u8; 32],
-    pub callback: Option<Callback>,
-}
-
-impl RequestParams {
-    pub fn new(seed: [u8; 32]) -> Self {
-        Self {
-            seed,
-            callback: None,
-        }
-    }
-
-    pub fn with_callback(mut self, callback: Callback) -> Self {
-        self.callback = Some(callback);
-        self
-    }
-}
-
-/// Request-level callback definition.
-#[derive(Clone, AnchorSerialize)]
-pub struct Callback {
-    pub remaining_accounts: Vec<RemainingAccount>,
-    pub data: Vec<u8>,
-}
-
-#[derive(Clone, AnchorSerialize)]
-pub struct RemainingAccount {
-    pub pubkey: Pubkey,
-    pub seeds: Option<Vec<Vec<u8>>>,
-}
-
-impl RemainingAccount {
-    /// Read-only account.
-    pub fn readonly(pubkey: Pubkey) -> Self {
-        Self {
-            pubkey,
-            seeds: None,
-        }
-    }
-
-    /// Writable account authorized by passing it as writable to the request.
-    pub fn arbitrary_writable(pubkey: Pubkey) -> Self {
-        Self {
-            pubkey,
-            seeds: Some(Vec::new()),
-        }
-    }
-
-    /// Writable PDA of our program, verified by seeds.
-    pub fn writable(pubkey: Pubkey, seeds: Vec<Vec<u8>>) -> Self {
-        Self {
-            pubkey,
-            seeds: Some(seeds),
-        }
-    }
-}
-
-/// PDA derivation helpers for ORAO accounts.
-pub fn vrf_network_state_address() -> Pubkey {
-    Pubkey::find_program_address(&[VRF_CONFIG_SEED], &VRF_PROGRAM_ID).0
-}
-
-pub fn vrf_client_address(state: &Pubkey) -> Pubkey {
-    Pubkey::find_program_address(
-        &[VRF_CLIENT_SEED, crate::ID.as_ref(), state.as_ref()],
-        &VRF_PROGRAM_ID,
-    )
-    .0
-}
-
-pub fn vrf_request_address(client: &Pubkey, seed: &[u8; 32]) -> Pubkey {
-    Pubkey::find_program_address(
-        &[VRF_REQUEST_SEED, client.as_ref(), seed],
-        &VRF_PROGRAM_ID,
-    )
-    .0
-}
-
-/// Our program's PDA derivation helpers.
 pub fn house_address() -> Pubkey {
     Pubkey::find_program_address(&[HOUSE_SEED], &crate::ID).0
-}
-
-pub fn vrf_state_address() -> Pubkey {
-    Pubkey::find_program_address(&[VRF_STATE_SEED], &crate::ID).0
-}
-
-pub fn pending_address(seed: &[u8; 32]) -> Pubkey {
-    Pubkey::find_program_address(&[PENDING_SEED, seed], &crate::ID).0
 }
 
 pub fn game_config_address(game_id: u8) -> Pubkey {
@@ -405,4 +239,8 @@ pub fn credits_address() -> Pubkey {
 
 pub fn chain_address() -> Pubkey {
     Pubkey::find_program_address(&[CHAIN_SEED], &crate::ID).0
+}
+
+pub fn bet_address(player: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[BET_SEED, player.as_ref()], &crate::ID).0
 }
